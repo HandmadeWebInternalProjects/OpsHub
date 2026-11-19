@@ -7,6 +7,7 @@ import { env } from "@/lib/env";
 import { logger, redact } from "@/lib/logger";
 
 import { enqueueJob } from "./enqueue";
+import { JobAbortError } from "./errors";
 import { jobHandlers } from "./handlers";
 import type { JobType } from "./types";
 
@@ -117,7 +118,10 @@ export async function runJob(job: Job): Promise<void> {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (job.attempts < MAX_ATTEMPTS) {
+    if (error instanceof JobAbortError) {
+      // Terminal: retrying cannot help.
+      await markFailed(job, message);
+    } else if (job.attempts < MAX_ATTEMPTS) {
       await reschedule(job, message);
     } else {
       await markFailed(job, message);

@@ -1,4 +1,5 @@
 import type { JobHandler, JobType } from "../types";
+import { provisionSiteHandler } from "./provision-site";
 import { syncServersHandler } from "./sync-servers";
 
 /**
@@ -7,4 +8,5 @@ import { syncServersHandler } from "./sync-servers";
  */
 export const jobHandlers: Partial<Record<JobType, JobHandler>> = {
   sync_servers: syncServersHandler,
+  provision_site: provisionSiteHandler,
 };
