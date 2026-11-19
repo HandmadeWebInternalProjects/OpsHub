@@ -1,0 +1,15 @@
+# Generated / retrieved files Prettier should not touch
+node_modules
+.next
+public
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# Spec & process docs (PROJECT.md is the constitution — never rewrite it)
+PROJECT.md
+MILESTONES.md
+AGENTS.md
+.opencode
+
+# Drizzle-managed artifacts
+lib/db/migrations

@@ -74,9 +74,7 @@ function redactValue(value: unknown, seen: WeakSet<object>): unknown {
 
   const result: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    result[key] = SENSITIVE_KEY.test(key)
-      ? REDACTED
-      : redactValue(item, seen);
+    result[key] = SENSITIVE_KEY.test(key) ? REDACTED : redactValue(item, seen);
   }
   return result;
 }

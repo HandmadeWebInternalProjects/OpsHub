@@ -16,9 +16,6 @@ export async function GET() {
       { error: redact(error) },
       "health check: database unreachable",
     );
-    return NextResponse.json(
-      { ok: false, db: "down" },
-      { status: 503 },
-    );
+    return NextResponse.json({ ok: false, db: "down" }, { status: 503 });
   }
 }
