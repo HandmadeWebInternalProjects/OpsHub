@@ -34,7 +34,7 @@ session and `307 → /login` without one.
 
 - [x] `clients` table CRUD: list, create, edit, archive (2026-11-19, 316f36c + fc3e72d)
 - [x] `projects` table CRUD: list, create, edit, archive (2026-11-19, 316f36c + 4818c16)
-- [x] Project detail page: domain, status, links (Strapi admin, Git repos) (2026-11-19, 4818c16)
+- [x] Project detail page: domain, status, links (content-backend admin, Git repos) (2026-11-19, 4818c16)
 - [x] Server Actions in `app/actions/clients.ts` and `projects.ts` (2026-11-19, 316f36c)
 - [x] Form validation via Zod; error states render in UI (2026-11-19, 316f36c + 2d225a2)
 
@@ -73,7 +73,7 @@ shows live data; linking a project to a Ploi site persists the IDs.
 
 - [ ] Wizard scaffold at `/projects/new`, 4 steps, Server Action transitions
 - [ ] Step 1: select existing client or create inline
-- [ ] Step 2: project name, domain, repo URLs (Strapi + Astro)
+- [ ] Step 2: project name, domain, repo URLs (CMS + Astro)
 - [ ] Step 3: select existing Ploi server + web server template (cached from Ploi)
 - [ ] Step 4: review screen + confirm enqueues `provision_site` job
 - [ ] `lib/jobs/handlers/provision-site.ts`:
@@ -140,15 +140,18 @@ the chart; malformed or unsigned payloads are rejected with 401.
 
 ## M7 — Audit summaries `[ ]`
 
-- [ ] Settings page: per-project Strapi API token (stored encrypted in
+- [ ] Settings page: per-project CMS API token (stored encrypted in
       `integration_config`)
 - [ ] `pull_audit_logs` job: every 15 min per project, fetch last 50 events
-      since last sync, upsert `audit_summaries` (dedupe on `external_id`)
+      since last sync via a `lib/cms` provider, upsert `audit_summaries`
+      (dedupe on `external_id`)
+- [ ] `PayloadProvider` (default) and `StrapiProvider` behind the
+      `NullCmsProvider` fallback
 - [ ] Project detail page: "Recent security activity" panel (last 20 events)
-- [ ] Plugin setup documented in README (`strapi-cms-audit-log`)
+- [ ] Content-backend audit setup documented in README
 
-**Acceptance:** A login failure on a test Strapi appears in OpsHub within
-15 minutes.
+**Acceptance:** A login failure on a test content backend appears in OpsHub
+within 15 minutes.
 
 **Depends on:** M1
 
@@ -174,6 +177,20 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-19 — Backend-agnostic CMS (Payload/Strapi)
+- Generalised the content backend per approved PROJECT.md change: added
+  `projects.cms_type` enum `('payload','strapi','other')` (default `payload`),
+  renamed `strapi_url`→`cms_url` and `strapi_repo_url`→`cms_repo_url`.
+- Added `lib/cms/`: `provider.ts` (`CmsProvider` + `AuditEvent`),
+  `null-provider.ts`, and a `getCmsProvider(type)` factory. Payload/Strapi
+  adapters land in M7; everything currently resolves to `NullCmsProvider`.
+- UI: project form gains a CMS select (Payload/Strapi/Other) and neutral
+  labels ("CMS", "CMS URL", "CMS repo URL"); detail page shows "CMS admin"/
+  "CMS repo" links. Validation + Server Actions updated.
+- Migration **squashed**: deleted the old `0000_*` and regenerated a single
+  `0000_*` migration from the current schema (pre-deployment, demo data only).
+- `pnpm lint` / `build` / `test:e2e` pass after the change.
 
 ### 2026-11-19 — M1 complete
 - Clients & projects CRUD via Server Actions in `app/actions/clients.ts` /

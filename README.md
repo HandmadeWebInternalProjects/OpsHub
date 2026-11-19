@@ -1,7 +1,8 @@
 # OpsHub
 
-Internal client operations platform. Orchestrates and observes client Strapi +
-Astro projects hosted on Ploi-managed Vultr infrastructure. See `PROJECT.md` for
+Internal client operations platform. Orchestrates and observes client
+content-backend (Payload or Strapi) + Astro projects hosted on Ploi-managed
+Vultr infrastructure. See `PROJECT.md` for
 the full spec and `MILESTONES.md` for the working checklist.
 
 ## Stack
