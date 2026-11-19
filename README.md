@@ -48,6 +48,7 @@ Override seed credentials with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | `pnpm db:generate` | Generate a Drizzle migration from the schema   |
 | `pnpm db:migrate`  | Apply pending migrations                       |
 | `pnpm db:seed`     | Seed the first admin user (idempotent)         |
+| `pnpm test:e2e`    | Playwright smoke test (migrates, seeds, tests) |
 
 Then open http://localhost:3000 and sign in.
 

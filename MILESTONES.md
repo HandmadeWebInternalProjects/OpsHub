@@ -191,8 +191,10 @@ entries at the top.
     enums; no rows are deleted.
   - Project create/edit uses Zod URL checks for Strapi/repo URLs and a domain
     pattern; empty optional fields are stored as `NULL`.
-  - Still no Vitest/Playwright yet — `pnpm test` / `test:e2e` remain undefined
-    (see M1 open question).
+  - Added **Playwright** with an M1 smoke test (`pnpm test:e2e`): login →
+    create client → create linked project → assert in list. The web server is
+    migrated + seeded automatically by `playwright.config.ts`. Vitest
+    (`pnpm test`) is still pending (wired when `lib/ploi/client.ts` lands).
 
 ### 2026-11-19 — M0 complete
 - Built M0 from scratch: Next.js 15 (App Router, TS strict) + Tailwind +
