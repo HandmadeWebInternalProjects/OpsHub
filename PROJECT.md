@@ -212,7 +212,7 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 | List sites on a server | `GET /servers/{id}/sites` | Fleet sync |
 | Create a site | `POST /servers/{id}/sites` | Provisioning wizard |
 | Trigger deploy | `POST /sites/{id}/deploy` | Deploy action |
-| Get site | `GET /sites/{id}` | Status check |
+| Get site | `GET /servers/{server}/sites/{id}` | Status check |
 
 **Required Ploi API scopes on the token:** servers read, sites read/write, deployments write.
 

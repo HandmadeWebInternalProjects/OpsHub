@@ -202,9 +202,9 @@ entries at the top.
 - **Docs verification (important)** — Ploi API fetched 2026-11-20:
   - Docs moved to **https://developers.ploi.io**; the URL in PROJECT.md §5.1
     (`ploi.io/documentation/api`) now 404s.
-  - **`GET /sites/{id}` (PROJECT.md §5.1) does not exist.** The real endpoint is
-    `GET /servers/{server}/sites/{id}`. Implemented the real path; PROJECT.md
-    §5.1 table left unedited (proposed change, awaiting approval).
+  - **`GET /sites/{id}` (PROJECT.md §5.1) did not exist.** The real endpoint is
+    `GET /servers/{server}/sites/{id}`. Implemented the real path and updated the
+    PROJECT.md §5.1 table accordingly (approved 2026-11-20).
   - `GET /servers/monitored` is **not** paginated (bare `data` array);
     `GET /servers` and `GET /servers/{id}/sites` **are** (`data` + `meta`).
     Monitored `statistics` values are strings (`cpu`, `ram`, `disk`,
