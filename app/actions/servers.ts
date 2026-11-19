@@ -63,3 +63,54 @@ export async function listServerSites(
     return { ok: false, error: "Could not load sites from Ploi." };
   }
 }
+
+export type PloiTemplateOption = { id: number; label: string };
+
+/** Read-only: the webserver templates saved in the Ploi account (wizard step 3). */
+export async function listWebserverTemplates(): Promise<
+  ActionResult<PloiTemplateOption[]>
+> {
+  if (!(await isSignedIn())) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  try {
+    const templates = await getPloiClient().listWebserverTemplates();
+    return {
+      ok: true,
+      data: templates.map((template) => ({
+        id: template.id,
+        label: template.label,
+      })),
+    };
+  } catch (error) {
+    if (error instanceof PloiError) {
+      return { ok: false, error: `Ploi: ${error.message}` };
+    }
+    logger.error({ error: redact(error) }, "listWebserverTemplates failed");
+    return {
+      ok: false,
+      error: "Could not load webserver templates from Ploi.",
+    };
+  }
+}
+
+/** Read-only: the system users on a Ploi server (wizard step 3, optional). */
+export async function listSystemUsers(
+  ploiServerId: number,
+): Promise<ActionResult<{ name: string }[]>> {
+  if (!(await isSignedIn())) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  try {
+    const users = await getPloiClient().listSystemUsers(ploiServerId);
+    return { ok: true, data: users.map((user) => ({ name: user.name })) };
+  } catch (error) {
+    if (error instanceof PloiError) {
+      return { ok: false, error: `Ploi: ${error.message}` };
+    }
+    logger.error({ error: redact(error) }, "listSystemUsers failed");
+    return { ok: false, error: "Could not load system users from Ploi." };
+  }
+}

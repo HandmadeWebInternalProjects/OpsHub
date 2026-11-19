@@ -68,6 +68,24 @@ export const ploiLinkSchema = z.object({
 
 export type PloiLinkInput = z.infer<typeof ploiLinkSchema>;
 
+/**
+ * The provisioning wizard (M3): everything needed to queue a `provision_site`
+ * job. Builds on the project fields and adds the infrastructure choices.
+ */
+export const provisionWizardSchema = projectFormSchema.extend({
+  ploiServerId: z.number().int().positive({ message: "Select a Ploi server" }),
+  webDirectory: z
+    .string()
+    .trim()
+    .min(1, "Web directory is required")
+    .max(50, "Web directory is too long")
+    .regex(/^[a-zA-Z0-9/]+$/, "Use only letters, numbers and slashes"),
+  webserverTemplateId: z.number().int().positive().nullable().optional(),
+  systemUser: z.string().trim().max(50, "System user is too long").optional(),
+});
+
+export type ProvisionWizardInput = z.infer<typeof provisionWizardSchema>;
+
 /** Derive a URL-safe slug from an arbitrary name. */
 export function slugify(value: string): string {
   const slug = value
