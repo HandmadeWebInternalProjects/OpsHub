@@ -3,13 +3,15 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+import { z } from "zod";
+
 import type { ActionResult } from "@/lib/action-result";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isForeignKeyViolation, isUniqueViolation } from "@/lib/db/errors";
 import { projects } from "@/lib/db/schema";
 import { logger, redact } from "@/lib/logger";
-import { projectFormSchema, slugify } from "@/lib/validation";
+import { ploiLinkSchema, projectFormSchema, slugify } from "@/lib/validation";
 
 async function isSignedIn(): Promise<boolean> {
   const session = await auth();
@@ -168,5 +170,45 @@ export async function archiveProject(
   } catch (error) {
     logger.error({ error: redact(error) }, "archiveProject failed");
     return { ok: false, error: "Could not archive the project." };
+  }
+}
+
+export async function linkProjectInfrastructure(
+  id: string,
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  if (!(await isSignedIn())) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  if (!z.uuid().safeParse(id).success) {
+    return { ok: false, error: "Invalid project id." };
+  }
+
+  const parsed = ploiLinkSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstIssue(parsed.error.issues) };
+  }
+
+  try {
+    const [row] = await db
+      .update(projects)
+      .set({
+        ploiServerId: parsed.data.ploiServerId,
+        ploiSiteId: parsed.data.ploiSiteId,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id });
+
+    if (!row) {
+      return { ok: false, error: "Project not found." };
+    }
+
+    revalidatePath(`/projects/${id}`);
+    return { ok: true, data: { id: row.id } };
+  } catch (error) {
+    logger.error({ error: redact(error) }, "linkProjectInfrastructure failed");
+    return { ok: false, error: "Could not save the Ploi link." };
   }
 }

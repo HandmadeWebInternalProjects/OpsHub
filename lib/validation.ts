@@ -60,6 +60,14 @@ export const projectFormSchema = z.object({
 
 export type ProjectFormInput = z.infer<typeof projectFormSchema>;
 
+/** Linking a project to an existing Ploi server + site (M2). */
+export const ploiLinkSchema = z.object({
+  ploiServerId: z.number().int().positive().nullable(),
+  ploiSiteId: z.number().int().positive().nullable(),
+});
+
+export type PloiLinkInput = z.infer<typeof ploiLinkSchema>;
+
 /** Derive a URL-safe slug from an arbitrary name. */
 export function slugify(value: string): string {
   const slug = value

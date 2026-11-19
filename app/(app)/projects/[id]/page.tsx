@@ -3,12 +3,13 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { PloiLinkForm } from "@/components/projects/ploi-link-form";
 import { ArchiveProjectButton } from "@/components/projects/archive-project-button";
 import { ProjectForm } from "@/components/projects/project-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
-import { clients, projects } from "@/lib/db/schema";
+import { clients, projects, servers } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,15 @@ export default async function ProjectDetailPage({
     .select({ id: clients.id, name: clients.name })
     .from(clients)
     .orderBy(asc(clients.name));
+
+  const ploiServers = await db
+    .select({
+      ploiServerId: servers.ploiServerId,
+      name: servers.name,
+      ipAddress: servers.ipAddress,
+    })
+    .from(servers)
+    .orderBy(asc(servers.name));
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,6 +139,20 @@ export default async function ProjectDetailPage({
               astroRepoUrl: project.astroRepoUrl ?? "",
               cmsRepoUrl: project.cmsRepoUrl ?? "",
             }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Ploi infrastructure</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PloiLinkForm
+            projectId={project.id}
+            servers={ploiServers}
+            defaultServerId={project.ploiServerId}
+            defaultSiteId={project.ploiSiteId}
           />
         </CardContent>
       </Card>
