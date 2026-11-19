@@ -51,6 +51,11 @@ export function ProjectForm({
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  const clientItems = clients.map((client) => ({
+    value: client.id,
+    label: client.name,
+  }));
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -75,6 +80,7 @@ export function ProjectForm({
       <div className="flex flex-col gap-2">
         <Label htmlFor="clientId">Client</Label>
         <Select
+          items={clientItems}
           value={values.clientId}
           onValueChange={(value) => update("clientId", String(value ?? ""))}
         >
