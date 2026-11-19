@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M0 — Foundation
+**Current:** M1 — Client & Project CRUD
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -9,22 +9,24 @@ Acceptance criteria at the end of each milestone must all be met before the
 
 ---
 
-## M0 — Foundation `[ ]`
+## M0 — Foundation `[x]`
 
-- [ ] Next.js 15 app: App Router, TypeScript strict, Tailwind, shadcn/ui
-- [ ] `lib/env.ts` with Zod validation; app fails fast on missing vars
-- [ ] PostgreSQL connection + Drizzle client (`lib/db/index.ts`)
-- [ ] Drizzle schema for all tables in PROJECT.md §4
-- [ ] Initial migration generated and applied
-- [ ] Auth.js credentials provider; no public signup
-- [ ] `scripts/seed.ts` creates first admin user
-- [ ] Base layout: sidebar (Dashboard, Clients, Projects, Servers, Settings) + header
-- [ ] `GET /api/health` returns `{ ok, db: 'up' | 'down' }`
-- [ ] `.env.example` matches PROJECT.md §8
-- [ ] Structured logger (`lib/logger.ts`) with `redact()`
+- [x] Next.js 15 app: App Router, TypeScript strict, Tailwind, shadcn/ui (2026-11-19, 93de03b + 7d9c4d9)
+- [x] `lib/env.ts` with Zod validation; app fails fast on missing vars (2026-11-19, 5f7390a)
+- [x] PostgreSQL connection + Drizzle client (`lib/db/index.ts`) (2026-11-19, 7a9b8b4)
+- [x] Drizzle schema for all tables in PROJECT.md §4 (2026-11-19, 7a9b8b4)
+- [x] Initial migration generated and applied (2026-11-19, 7a9b8b4)
+- [x] Auth.js credentials provider; no public signup (2026-11-19, 93e6ee8)
+- [x] `scripts/seed.ts` creates first admin user (2026-11-19, bc293f7)
+- [x] Base layout: sidebar (Dashboard, Clients, Projects, Servers, Settings) + header (2026-11-19, 63b8239)
+- [x] `GET /api/health` returns `{ ok, db: 'up' | 'down' }` (2026-11-19, ec4b975)
+- [x] `.env.example` matches PROJECT.md §8 (2026-11-19, 5f7390a)
+- [x] Structured logger (`lib/logger.ts`) with `redact()` (2026-11-19, 5f7390a)
 
 **Acceptance:** App boots, migrates cleanly, seeds an admin, logs in, and
-renders an empty dashboard with working navigation.
+renders an empty dashboard with working navigation. ✅ Verified 2026-11-19:
+health `200`; credentials login `302 → /dashboard`; `/dashboard` renders with a
+session and `307 → /login` without one.
 
 ---
 
@@ -169,6 +171,27 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-19 — M0 complete
+- Built M0 from scratch: Next.js 15 (App Router, TS strict) + Tailwind +
+  shadcn/ui; Drizzle schema for all §4 tables + initial migration applied;
+  Auth.js credentials provider + `scripts/seed.ts` admin; sidebar/header shell
+  with login + empty dashboard; `GET /api/health`; Zod env + pino logger.
+- Verified acceptance end-to-end: health `200`; admin login `302 → /dashboard`
+  (session cookie set); `/dashboard` `200` with session, `307 → /login` without.
+- Decisions / notes:
+  - Local DB is **Postgres.app Postgres 18** (spec §2 says 16). Database
+    `opshub`; `DATABASE_URL` uses OS user `yohan` (trust auth on localhost).
+  - Added **`tsx`** devDependency for standalone TS scripts (seed now, worker
+    later) — approved by user. Node 22 native TS cannot resolve the `@/*`
+    tsconfig alias.
+  - shadcn/ui resolved to the new **base-nova** style on `@base-ui/react`
+    (not Radix). Spec only requires "shadcn/ui + Tailwind".
+  - `.env` is local-only (gitignored); secrets generated with `openssl rand`.
+  - `pnpm test` / `pnpm test:e2e` / `pnpm worker` scripts not defined yet —
+    Vitest / Playwright / worker arrive with the milestones that need them.
+- Blocker (resolved): MILESTONES.md shipped claiming M0–M2 done with commit
+  SHAs that did not exist; the user reset it before work began.
 
 <!--
 ### YYYY-MM-DD
