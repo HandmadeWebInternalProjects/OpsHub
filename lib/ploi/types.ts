@@ -56,7 +56,8 @@ export const ploiSiteSchema = z.looseObject({
   server_id: z.number().nullish(),
   status: z.string().nullish(),
   domain: z.string(),
-  deploy_script: z.boolean().nullish(),
+  // The docs show a boolean, but the live API returns the deploy script text.
+  deploy_script: z.union([z.boolean(), z.string()]).nullish(),
   web_directory: z.string().nullish(),
   project_type: z.string().nullish(),
   project_root: z.string().nullish(),

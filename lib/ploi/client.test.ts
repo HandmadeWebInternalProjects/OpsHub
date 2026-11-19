@@ -70,11 +70,20 @@ describe("PloiClient", () => {
 
   it("requests the server-scoped site path", async () => {
     const fetchImpl = makeFetch(async () =>
-      jsonResponse({ data: { id: 7, server_id: 1, domain: "x.com" } }),
+      jsonResponse({
+        data: {
+          id: 7,
+          server_id: 1,
+          domain: "x.com",
+          // The live API returns the deploy script text, not a boolean.
+          deploy_script: "cd /home/ploi/x.com\ngit pull\n",
+        },
+      }),
     );
 
     const site = await clientWith(fetchImpl).getSite(1, 7);
     expect(site.domain).toBe("x.com");
+    expect(site.deploy_script).toBe("cd /home/ploi/x.com\ngit pull\n");
 
     const calls = (fetchImpl as unknown as Mock).mock.calls;
     expect(calls[0]?.[0]).toBe("https://ploi.test/api/servers/1/sites/7");
