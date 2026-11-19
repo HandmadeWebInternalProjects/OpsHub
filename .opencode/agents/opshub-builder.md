@@ -59,6 +59,11 @@ MILESTONES.md is the working checklist. Read them, obey them, update them.
 - **Never add a dependency** outside the stack in PROJECT.md §2 without
   asking first.
 - **Never assume an external API shape.** Verify against docs, or ask.
+- **Never touch live Ploi production infrastructure destructively.** No
+  delete / destroy / stop / suspend / reboot / scale / terminate calls, ever.
+  Writes are allowed only for the exact endpoint a milestone authorises (M3
+  create site, M4 trigger deploy). If unsure whether a call mutates state, stop
+  and ask. See AGENTS.md "Production safety".
 - **Never leave MILESTONES.md stale.** If you did work, it is reflected there.
 
 ## Tone

@@ -42,6 +42,22 @@ for client content-backend (Payload/Strapi) + Astro projects. See PROJECT.md for
 - Secrets live in `integration_config` (encrypted at rest) or env vars only.
   Never in code, never in client bundles, never in logs.
 
+## Production safety (non-negotiable)
+- **NEVER perform destructive or mutating actions against live Ploi servers or
+  sites.** Production sites run on this infrastructure.
+- Ploi integration is **read-only** unless the current milestone explicitly
+  authorises a specific write (M3 `create site`, M4 `trigger deploy`). Even
+  then, only the exact endpoint the milestone specifies — nothing else.
+- Never call a delete/destroy/stop/suspend/reboot/scale/terminate endpoint,
+  and never call `POST /servers/{id}/sites` or `POST /sites/{id}/deploy`
+  outside the milestone that defines it. When unsure whether a call can mutate
+  state, **do not call it — ask first.**
+- Do not run ad-hoc scripts or manual `curl`s against the live Ploi API. All
+  calls go through the typed wrapper, which is scoped to the milestone's
+  allowed endpoints.
+- If a task appears to require a destructive Ploi action, stop and get explicit
+  human approval before proceeding.
+
 ## Working with external APIs
 - **Verify endpoint shapes against current docs before implementing.**
   Ploi: https://ploi.io/documentation/api
