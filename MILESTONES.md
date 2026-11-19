@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M2 — Ploi read-only integration
+**Current:** M2 complete ✅ — M3 (Provisioning Wizard) not started, awaiting confirmation
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -48,22 +48,27 @@ project and client, both showing `Archived` in list/detail.
 
 ---
 
-## M2 — Ploi read-only integration `[ ]`
+## M2 — Ploi read-only integration `[x]`
 
-- [ ] `lib/ploi/client.ts`: typed wrappers for
+- [x] `lib/ploi/client.ts`: typed wrappers for
       `GET /servers/monitored`, `GET /servers/{id}`, `GET /servers/{id}/sites`,
-      `GET /sites/{id}` (verify shapes against Ploi docs first)
-- [ ] `lib/ploi/types.ts`: Zod schemas for responses
-- [ ] `lib/ploi/mock.ts` mock adapter, switched by `USE_MOCKS=true`
-- [ ] `PloiError` class; circuit breaker after 3 consecutive failures
-- [ ] Rate limiter: token bucket, 5 req/sec cap
-- [ ] `sync_servers` job: fetch `/servers/monitored`, upsert `servers` table
-- [ ] Servers page lists Ploi servers with cached stats
-- [ ] Project can be linked to an existing Ploi server + site via dropdown
-- [ ] Manual "Sync now" button on Servers page enqueues `sync_servers` job
+      `GET /servers/{server}/sites/{id}` (2026-11-20, 8f08b60) — see Session Log:
+      the documented `GET /sites/{id}` does not exist upstream
+- [x] `lib/ploi/types.ts`: Zod schemas for responses (2026-11-20, 8f08b60)
+- [x] `lib/ploi/mock.ts` mock adapter, switched by `USE_MOCKS=true` (2026-11-20, 8f08b60)
+- [x] `PloiError` class; circuit breaker after 3 consecutive failures (2026-11-20, 8f08b60)
+- [x] Rate limiter: token bucket, 5 req/sec cap (2026-11-20, 8f08b60)
+- [x] `sync_servers` job: fetch `/servers/monitored`, upsert `servers` table (2026-11-20, d39d727 + bc8a51a)
+- [x] Servers page lists Ploi servers with cached stats (2026-11-20, 02a183e)
+- [x] Project can be linked to an existing Ploi server + site via dropdown (2026-11-20, 02a183e)
+- [x] Manual "Sync now" button on Servers page enqueues `sync_servers` job (2026-11-20, 02a183e)
 
 **Acceptance:** Clicking "Sync now" populates `servers` from Ploi; the UI
-shows live data; linking a project to a Ploi site persists the IDs.
+shows live data; linking a project to a Ploi site persists the IDs. ✅
+Verified 2026-11-20 in-browser (mock adapter): clicked "Sync now" → action
+enqueued a `sync_servers` job → worker upserted 2 servers → Servers page
+rendered cached stats (CPU/RAM/Disk/Load); linked project `285a44b6…` to
+server `1001` / site `501`, persisted in the DB.
 
 **Depends on:** M1
 
@@ -177,6 +182,44 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M2 Ploi read-only integration (built; acceptance verification in progress)
+- **`lib/ploi/`**: `types.ts` (Zod, loose objects that tolerate extra fields),
+  `client.ts` (read-only GET wrappers), `mock.ts` (`USE_MOCKS=true`),
+  `errors.ts` (`PloiError`, `PloiCircuitOpenError`), `rate-limiter.ts`
+  (token bucket), `circuit-breaker.ts`, and a singleton `getPloiClient()`.
+- **Jobs**: `lib/jobs/` — DB-backed runner (claims with
+  `FOR UPDATE SKIP LOCKED`, retries ×3 with exponential backoff), `enqueueJob`,
+  `sync_servers` handler (idempotent upsert on `ploi_server_id`), and
+  `scripts/run-worker.ts` (`pnpm worker`). The worker enqueues `sync_servers`
+  every 5 min via an `enqueueIfStale` guard.
+- **UI**: Servers page (cached list + latest stats + **Sync now**), and a
+  "Ploi infrastructure" card on the project detail page to link a Ploi
+  server + site (sites fetched live via `listServerSites`).
+- **Testing**: added **Vitest** + `pnpm test` (11 unit tests: client parse /
+  HTTP error / network error / circuit-open, rate limiter, circuit breaker).
+  `tsc --noEmit`, `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm test:e2e` all pass.
+- **Docs verification (important)** — Ploi API fetched 2026-11-20:
+  - Docs moved to **https://developers.ploi.io**; the URL in PROJECT.md §5.1
+    (`ploi.io/documentation/api`) now 404s.
+  - **`GET /sites/{id}` (PROJECT.md §5.1) does not exist.** The real endpoint is
+    `GET /servers/{server}/sites/{id}`. Implemented the real path; PROJECT.md
+    §5.1 table left unedited (proposed change, awaiting approval).
+  - `GET /servers/monitored` is **not** paginated (bare `data` array);
+    `GET /servers` and `GET /servers/{id}/sites` **are** (`data` + `meta`).
+    Monitored `statistics` values are strings (`cpu`, `ram`, `disk`,
+    `load_average`).
+  - Monitored/list endpoints do **not** expose the server `provider`, so
+    `servers.provider` (NOT NULL) is stored as `"unknown"`. Flagged for M5.
+- **Spec change**: added `sync_servers` to the `jobs.type` enum in PROJECT.md §4
+  — it was missing even though §6/M2 require the job. Minimal one-line fix +
+  migration `0001_slippery_maria_hill.sql`.
+- **Verified**: a one-off worker run (USE_MOCKS=true) enqueued + ran
+  `sync_servers`, upserting 2 mock servers; a second run was a no-op (recurrence
+  guard + idempotent upsert). **In-browser acceptance done** 2026-11-20 (mock
+  adapter): Sync now → job → worker → 2 servers with stats; project linked to
+  server 1001 / site 501 and persisted. `tsc`, `lint`, `build`, `test`,
+  `test:e2e` all pass.
 
 ### 2026-11-19 — Backend-agnostic CMS (Payload/Strapi)
 - Generalised the content backend per approved PROJECT.md change: added
