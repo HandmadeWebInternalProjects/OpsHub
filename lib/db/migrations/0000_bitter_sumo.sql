@@ -1,4 +1,5 @@
 CREATE TYPE "public"."client_status" AS ENUM('active', 'paused', 'archived');--> statement-breakpoint
+CREATE TYPE "public"."cms_type" AS ENUM('payload', 'strapi', 'other');--> statement-breakpoint
 CREATE TYPE "public"."job_status" AS ENUM('pending', 'running', 'succeeded', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."job_type" AS ENUM('provision_site', 'trigger_deploy', 'sync_server_metrics', 'pull_audit_logs', 'pull_page_scores');--> statement-breakpoint
 CREATE TYPE "public"."project_status" AS ENUM('draft', 'provisioning', 'deploying', 'live', 'failed', 'archived');--> statement-breakpoint
@@ -84,11 +85,12 @@ CREATE TABLE "projects" (
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"domain" text NOT NULL,
+	"cms_type" "cms_type" DEFAULT 'payload' NOT NULL,
 	"ploi_server_id" integer,
 	"ploi_site_id" integer,
-	"strapi_url" text,
+	"cms_url" text,
 	"astro_repo_url" text,
-	"strapi_repo_url" text,
+	"cms_repo_url" text,
 	"status" "project_status" DEFAULT 'draft' NOT NULL,
 	"provisioning_job_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

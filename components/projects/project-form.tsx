@@ -20,9 +20,10 @@ export type ProjectFormValues = {
   name: string;
   slug: string;
   domain: string;
-  strapiUrl: string;
+  cmsType: string;
+  cmsUrl: string;
   astroRepoUrl: string;
-  strapiRepoUrl: string;
+  cmsRepoUrl: string;
 };
 
 export function ProjectForm({
@@ -40,9 +41,10 @@ export function ProjectForm({
     name: defaultValues?.name ?? "",
     slug: defaultValues?.slug ?? "",
     domain: defaultValues?.domain ?? "",
-    strapiUrl: defaultValues?.strapiUrl ?? "",
+    cmsType: defaultValues?.cmsType ?? "payload",
+    cmsUrl: defaultValues?.cmsUrl ?? "",
     astroRepoUrl: defaultValues?.astroRepoUrl ?? "",
-    strapiRepoUrl: defaultValues?.strapiRepoUrl ?? "",
+    cmsRepoUrl: defaultValues?.cmsRepoUrl ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -55,6 +57,12 @@ export function ProjectForm({
     value: client.id,
     label: client.name,
   }));
+
+  const cmsTypeItems = [
+    { value: "payload", label: "Payload" },
+    { value: "strapi", label: "Strapi" },
+    { value: "other", label: "Other" },
+  ];
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,6 +124,27 @@ export function ProjectForm({
         />
       </div>
       <div className="flex flex-col gap-2">
+        <Label htmlFor="cmsType">CMS</Label>
+        <Select
+          items={cmsTypeItems}
+          value={values.cmsType}
+          onValueChange={(value) =>
+            update("cmsType", String(value ?? "payload"))
+          }
+        >
+          <SelectTrigger id="cmsType" className="w-full">
+            <SelectValue placeholder="Select a CMS" />
+          </SelectTrigger>
+          <SelectContent>
+            {cmsTypeItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-2">
         <Label htmlFor="slug">
           Slug <span className="text-muted-foreground">(optional)</span>
         </Label>
@@ -127,11 +156,11 @@ export function ProjectForm({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="strapiUrl">Strapi URL</Label>
+        <Label htmlFor="cmsUrl">CMS URL</Label>
         <Input
-          id="strapiUrl"
-          value={values.strapiUrl}
-          onChange={(event) => update("strapiUrl", event.target.value)}
+          id="cmsUrl"
+          value={values.cmsUrl}
+          onChange={(event) => update("cmsUrl", event.target.value)}
           placeholder="https://cms.example.com"
         />
       </div>
@@ -145,11 +174,11 @@ export function ProjectForm({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor="strapiRepoUrl">Strapi repo URL</Label>
+        <Label htmlFor="cmsRepoUrl">CMS repo URL</Label>
         <Input
-          id="strapiRepoUrl"
-          value={values.strapiRepoUrl}
-          onChange={(event) => update("strapiRepoUrl", event.target.value)}
+          id="cmsRepoUrl"
+          value={values.cmsRepoUrl}
+          onChange={(event) => update("cmsRepoUrl", event.target.value)}
           placeholder="https://github.com/org/cms"
         />
       </div>

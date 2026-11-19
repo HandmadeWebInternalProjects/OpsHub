@@ -1,5 +1,5 @@
 {
-  "id": "4147be50-6986-442f-ab68-8115467de7b9",
+  "id": "ca640518-da2f-4489-9871-9d846ec3c025",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -536,6 +536,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "cms_type": {
+          "name": "cms_type",
+          "type": "cms_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'payload'"
+        },
         "ploi_server_id": {
           "name": "ploi_server_id",
           "type": "integer",
@@ -548,8 +556,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "strapi_url": {
-          "name": "strapi_url",
+        "cms_url": {
+          "name": "cms_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -560,8 +568,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "strapi_repo_url": {
-          "name": "strapi_repo_url",
+        "cms_repo_url": {
+          "name": "cms_repo_url",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -782,6 +790,15 @@
         "active",
         "paused",
         "archived"
+      ]
+    },
+    "public.cms_type": {
+      "name": "cms_type",
+      "schema": "public",
+      "values": [
+        "payload",
+        "strapi",
+        "other"
       ]
     },
     "public.job_status": {

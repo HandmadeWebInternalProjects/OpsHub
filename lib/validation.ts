@@ -52,9 +52,10 @@ export const projectFormSchema = z.object({
     .min(1, "Domain is required")
     .max(253, "Domain is too long")
     .regex(DOMAIN_PATTERN, "Enter a valid domain, e.g. example.com"),
-  strapiUrl: optionalUrl,
+  cmsType: z.enum(["payload", "strapi", "other"]).default("payload"),
+  cmsUrl: optionalUrl,
   astroRepoUrl: optionalUrl,
-  strapiRepoUrl: optionalUrl,
+  cmsRepoUrl: optionalUrl,
 });
 
 export type ProjectFormInput = z.infer<typeof projectFormSchema>;

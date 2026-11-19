@@ -41,9 +41,10 @@ export async function createProject(
     name,
     slug,
     domain,
-    strapiUrl,
+    cmsType,
+    cmsUrl,
     astroRepoUrl,
-    strapiRepoUrl,
+    cmsRepoUrl,
   } = parsed.data;
 
   try {
@@ -54,9 +55,10 @@ export async function createProject(
         name,
         slug: slug && slug.length > 0 ? slug : slugify(name),
         domain,
-        strapiUrl: nullable(strapiUrl),
+        cmsType,
+        cmsUrl: nullable(cmsUrl),
         astroRepoUrl: nullable(astroRepoUrl),
-        strapiRepoUrl: nullable(strapiRepoUrl),
+        cmsRepoUrl: nullable(cmsRepoUrl),
       })
       .returning({ id: projects.id });
 
@@ -96,9 +98,10 @@ export async function updateProject(
     name,
     slug,
     domain,
-    strapiUrl,
+    cmsType,
+    cmsUrl,
     astroRepoUrl,
-    strapiRepoUrl,
+    cmsRepoUrl,
   } = parsed.data;
 
   try {
@@ -109,9 +112,10 @@ export async function updateProject(
         name,
         slug: slug && slug.length > 0 ? slug : slugify(name),
         domain,
-        strapiUrl: nullable(strapiUrl),
+        cmsType,
+        cmsUrl: nullable(cmsUrl),
         astroRepoUrl: nullable(astroRepoUrl),
-        strapiRepoUrl: nullable(strapiRepoUrl),
+        cmsRepoUrl: nullable(cmsRepoUrl),
         updatedAt: new Date(),
       })
       .where(eq(projects.id, id))

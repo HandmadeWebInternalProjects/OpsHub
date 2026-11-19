@@ -105,9 +105,9 @@ export default async function ProjectDetailPage({
             <span className="text-sm text-muted-foreground">Domain</span>
             <span className="text-sm font-medium">{project.domain}</span>
           </div>
-          <ExternalLink label="Strapi admin" href={project.strapiUrl} />
+          <ExternalLink label="CMS admin" href={project.cmsUrl} />
           <ExternalLink label="Astro repo" href={project.astroRepoUrl} />
-          <ExternalLink label="Strapi repo" href={project.strapiRepoUrl} />
+          <ExternalLink label="CMS repo" href={project.cmsRepoUrl} />
         </CardContent>
       </Card>
 
@@ -124,9 +124,10 @@ export default async function ProjectDetailPage({
               name: project.name,
               slug: project.slug,
               domain: project.domain,
-              strapiUrl: project.strapiUrl ?? "",
+              cmsType: project.cmsType,
+              cmsUrl: project.cmsUrl ?? "",
               astroRepoUrl: project.astroRepoUrl ?? "",
-              strapiRepoUrl: project.strapiRepoUrl ?? "",
+              cmsRepoUrl: project.cmsRepoUrl ?? "",
             }}
           />
         </CardContent>

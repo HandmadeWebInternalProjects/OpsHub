@@ -34,6 +34,8 @@ export const projectStatus = pgEnum("project_status", [
   "archived",
 ]);
 
+export const cmsType = pgEnum("cms_type", ["payload", "strapi", "other"]);
+
 export const jobType = pgEnum("job_type", [
   "provision_site",
   "trigger_deploy",
@@ -71,11 +73,12 @@ export const projects = pgTable("projects", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   domain: text("domain").notNull().unique(),
+  cmsType: cmsType("cms_type").notNull().default("payload"),
   ploiServerId: integer("ploi_server_id"),
   ploiSiteId: integer("ploi_site_id"),
-  strapiUrl: text("strapi_url"),
+  cmsUrl: text("cms_url"),
   astroRepoUrl: text("astro_repo_url"),
-  strapiRepoUrl: text("strapi_repo_url"),
+  cmsRepoUrl: text("cms_repo_url"),
   status: projectStatus("status").notNull().default("draft"),
   provisioningJobId: uuid("provisioning_job_id"),
   ...timestamps,
@@ -129,7 +132,7 @@ export const pageScores = pgTable("page_scores", {
   ...timestamps,
 });
 
-// audit_summaries (rolled up from Strapi)
+// audit_summaries (rolled up from the content backend)
 export const auditSummaries = pgTable("audit_summaries", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id")
