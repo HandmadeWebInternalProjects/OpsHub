@@ -55,4 +55,6 @@ Then open http://localhost:3000 and sign in.
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
 dashboard, and a health check (`GET /api/health` → `{ ok, db: 'up' \| 'down' }`).
-Later milestones are tracked in `MILESTONES.md`.
+**M1 — Client & Project CRUD** complete: list/create/edit/archive for clients
+and projects, plus a project detail page. Later milestones are tracked in
+`MILESTONES.md`.

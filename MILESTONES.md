@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M1 — Client & Project CRUD
+**Current:** M2 — Ploi read-only integration
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -30,16 +30,19 @@ session and `307 → /login` without one.
 
 ---
 
-## M1 — Client & Project CRUD `[ ]`
+## M1 — Client & Project CRUD `[x]`
 
-- [ ] `clients` table CRUD: list, create, edit, archive
-- [ ] `projects` table CRUD: list, create, edit, archive
-- [ ] Project detail page: domain, status, links (Strapi admin, Git repos)
-- [ ] Server Actions in `app/actions/clients.ts` and `projects.ts`
-- [ ] Form validation via Zod; error states render in UI
+- [x] `clients` table CRUD: list, create, edit, archive (2026-11-19, 316f36c + fc3e72d)
+- [x] `projects` table CRUD: list, create, edit, archive (2026-11-19, 316f36c + 4818c16)
+- [x] Project detail page: domain, status, links (Strapi admin, Git repos) (2026-11-19, 4818c16)
+- [x] Server Actions in `app/actions/clients.ts` and `projects.ts` (2026-11-19, 316f36c)
+- [x] Form validation via Zod; error states render in UI (2026-11-19, 316f36c + 2d225a2)
 
 **Acceptance:** A user can create a client, then a project linked to it, edit
-both, archive both, and see state reflected in list and detail views.
+both, archive both, and see state reflected in list and detail views. ✅
+Verified 2026-11-19 in-browser: created `Acme Corp` → project `Acme Marketing
+Site` (linked, domain + repo links shown) → lists reflect linkage → archived
+project and client, both showing `Archived` in list/detail.
 
 **Depends on:** M0
 
@@ -171,6 +174,25 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-19 — M1 complete
+- Clients & projects CRUD via Server Actions in `app/actions/clients.ts` /
+  `projects.ts` (Zod-validated, `{ ok, data } | { ok, error }`), list/create/
+  edit/archive pages, project detail with Strapi/Git links, shared
+  `StatusBadge`, and archive confirm dialogs.
+- New shared modules: `lib/action-result.ts`, `lib/validation.ts`,
+  `lib/db/errors.ts` (unique/FK violation detection).
+- Verified acceptance in-browser: created client `Acme Corp` → project `Acme
+  Marketing Site` (linked) → archived both; lists/details reflect state.
+- Fix: Base UI `Select` needs an `items` label map or `SelectValue` renders the
+  raw UUID (fixed in `2d225a2`).
+- Notes:
+  - Archive is a soft delete (`status = 'archived'`), matching the §4 status
+    enums; no rows are deleted.
+  - Project create/edit uses Zod URL checks for Strapi/repo URLs and a domain
+    pattern; empty optional fields are stored as `NULL`.
+  - Still no Vitest/Playwright yet — `pnpm test` / `test:e2e` remain undefined
+    (see M1 open question).
 
 ### 2026-11-19 — M0 complete
 - Built M0 from scratch: Next.js 15 (App Router, TS strict) + Tailwind +
