@@ -1,0 +1,178 @@
+# Milestones
+
+**Current:** M0 — Foundation
+
+Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
+
+Acceptance criteria at the end of each milestone must all be met before the
+"Current" banner moves to the next milestone.
+
+---
+
+## M0 — Foundation `[ ]`
+
+- [ ] Next.js 15 app: App Router, TypeScript strict, Tailwind, shadcn/ui
+- [ ] `lib/env.ts` with Zod validation; app fails fast on missing vars
+- [ ] PostgreSQL connection + Drizzle client (`lib/db/index.ts`)
+- [ ] Drizzle schema for all tables in PROJECT.md §4
+- [ ] Initial migration generated and applied
+- [ ] Auth.js credentials provider; no public signup
+- [ ] `scripts/seed.ts` creates first admin user
+- [ ] Base layout: sidebar (Dashboard, Clients, Projects, Servers, Settings) + header
+- [ ] `GET /api/health` returns `{ ok, db: 'up' | 'down' }`
+- [ ] `.env.example` matches PROJECT.md §8
+- [ ] Structured logger (`lib/logger.ts`) with `redact()`
+
+**Acceptance:** App boots, migrates cleanly, seeds an admin, logs in, and
+renders an empty dashboard with working navigation.
+
+---
+
+## M1 — Client & Project CRUD `[ ]`
+
+- [ ] `clients` table CRUD: list, create, edit, archive
+- [ ] `projects` table CRUD: list, create, edit, archive
+- [ ] Project detail page: domain, status, links (Strapi admin, Git repos)
+- [ ] Server Actions in `app/actions/clients.ts` and `projects.ts`
+- [ ] Form validation via Zod; error states render in UI
+
+**Acceptance:** A user can create a client, then a project linked to it, edit
+both, archive both, and see state reflected in list and detail views.
+
+**Depends on:** M0
+
+---
+
+## M2 — Ploi read-only integration `[ ]`
+
+- [ ] `lib/ploi/client.ts`: typed wrappers for
+      `GET /servers/monitored`, `GET /servers/{id}`, `GET /servers/{id}/sites`,
+      `GET /sites/{id}` (verify shapes against Ploi docs first)
+- [ ] `lib/ploi/types.ts`: Zod schemas for responses
+- [ ] `lib/ploi/mock.ts` mock adapter, switched by `USE_MOCKS=true`
+- [ ] `PloiError` class; circuit breaker after 3 consecutive failures
+- [ ] Rate limiter: token bucket, 5 req/sec cap
+- [ ] `sync_servers` job: fetch `/servers/monitored`, upsert `servers` table
+- [ ] Servers page lists Ploi servers with cached stats
+- [ ] Project can be linked to an existing Ploi server + site via dropdown
+- [ ] Manual "Sync now" button on Servers page enqueues `sync_servers` job
+
+**Acceptance:** Clicking "Sync now" populates `servers` from Ploi; the UI
+shows live data; linking a project to a Ploi site persists the IDs.
+
+**Depends on:** M1
+
+---
+
+## M3 — Provisioning Wizard `[ ]`
+
+- [ ] Wizard scaffold at `/projects/new`, 4 steps, Server Action transitions
+- [ ] Step 1: select existing client or create inline
+- [ ] Step 2: project name, domain, repo URLs (Strapi + Astro)
+- [ ] Step 3: select existing Ploi server + web server template (cached from Ploi)
+- [ ] Step 4: review screen + confirm enqueues `provision_site` job
+- [ ] `lib/jobs/handlers/provision-site.ts`:
+      create project row (status `provisioning`) → `POST /servers/{id}/sites`
+      → poll `GET /sites/{id}` (5 min max, exponential backoff) → set
+      `ploi_site_id`, status `deploying` → `POST /sites/{id}/deploy`
+- [ ] `GET /api/jobs/{id}` polling endpoint; wizard polls every 3s
+- [ ] Job progress UI: current step, spinner, error surface
+
+**Acceptance:** A wizard run creates a real site on Ploi; project status
+transitions `provisioning → deploying → live`; failure surfaces clearly.
+
+**Depends on:** M2
+
+---
+
+## M4 — Deployment status & webhooks `[ ]`
+
+- [ ] `deploy_events` table (project_id, event, status, timestamp, message)
+- [ ] `POST /api/webhooks/ploi/deploy-complete`: validate signature,
+      update `project.status`, insert `deploy_events` row (idempotent)
+- [ ] Project detail page: deploy timeline (last 20 events)
+- [ ] Manual "Redeploy" button → `POST /sites/{id}/deploy`
+
+**Acceptance:** A repo push (or Redeploy click) updates project status in
+real time; the deploy timeline reflects the sequence accurately.
+
+**Depends on:** M3
+
+---
+
+## M5 — Fleet vitals dashboard `[ ]`
+
+- [ ] `/dashboard` fleet summary: N servers, N live projects, N failing
+- [ ] Server cards: CPU, RAM, disk, load with 7-day sparkline
+- [ ] `sync_server_metrics` job: every 5 min, `GET /servers/monitored`,
+      write one `metrics_snapshots` row per server per run
+- [ ] Metrics retention: prune rows older than 90 days
+- [ ] Project health table: status, last deploy, latest page score
+
+**Acceptance:** Dashboard shows live-ish stats for all servers, refreshed on
+a 5-minute cadence; the sparklines trend correctly.
+
+**Depends on:** M2, M4
+
+---
+
+## M6 — Page scores `[ ]`
+
+- [ ] `POST /api/webhooks/lighthouse/{projectId}`: validate HMAC
+      `X-OpsHub-Signature`, insert `page_scores` row (idempotent)
+- [ ] `scripts/lighthouse-reporter.mjs` reference client (reads `LHCI_*` env,
+      POSTs to OpsHub)
+- [ ] Project detail page: 30-day line chart of performance/accessibility/
+      best-practices/SEO (recharts)
+- [ ] Documented integration steps in README for client Astro CI pipelines
+
+**Acceptance:** Running the reference script against a test project populates
+the chart; malformed or unsigned payloads are rejected with 401.
+
+**Depends on:** M1
+
+---
+
+## M7 — Audit summaries `[ ]`
+
+- [ ] Settings page: per-project Strapi API token (stored encrypted in
+      `integration_config`)
+- [ ] `pull_audit_logs` job: every 15 min per project, fetch last 50 events
+      since last sync, upsert `audit_summaries` (dedupe on `external_id`)
+- [ ] Project detail page: "Recent security activity" panel (last 20 events)
+- [ ] Plugin setup documented in README (`strapi-cms-audit-log`)
+
+**Acceptance:** A login failure on a test Strapi appears in OpsHub within
+15 minutes.
+
+**Depends on:** M1
+
+---
+
+## M8 — Alerting `[ ]`
+
+- [ ] `alert_rules` table: (project_id nullable, rule_type, threshold, channel)
+- [ ] Rule types: `server_disk_pct`, `page_score_performance`, `deploy_failed`,
+      `audit_login_failed_count`
+- [ ] Delivery: webhook (Slack/Discord-compatible) + email (Resend)
+- [ ] Alerts sidebar section with acknowledge action
+- [ ] Evaluation runs on each metrics / audit / deploy event
+
+**Acceptance:** A configured rule fires and delivers to Slack; the alert
+appears in the UI with an acknowledge action.
+
+**Depends on:** M5, M6, M7
+
+---
+
+## Session Log
+
+Append entries here when you hit a blocker or complete a session. Newest
+entries at the top.
+
+<!--
+### YYYY-MM-DD
+- What was attempted
+- What failed / what's blocked
+- What information is needed to proceed
+-->
