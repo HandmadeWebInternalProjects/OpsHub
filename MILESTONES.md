@@ -82,9 +82,11 @@ server `1001` / site `501`, persisted in the DB.
 - [ ] Step 3: select existing Ploi server + web server template (cached from Ploi)
 - [ ] Step 4: review screen + confirm enqueues `provision_site` job
 - [ ] `lib/jobs/handlers/provision-site.ts`:
-      create project row (status `provisioning`) → `POST /servers/{id}/sites`
-      → poll `GET /sites/{id}` (5 min max, exponential backoff) → set
-      `ploi_site_id`, status `deploying` → `POST /sites/{id}/deploy`
+      create project row (status `provisioning`) → `POST /servers/{server}/sites`
+      → poll `GET /servers/{server}/sites/{id}` until `active` (5 min max,
+      exponential backoff) → set `ploi_site_id`, status `deploying` →
+      `POST /servers/{server}/sites/{id}/deploy` → poll
+      `GET /servers/{server}/sites/{site}/deployments/{deployment}` → `live`/`failed`
 - [ ] `GET /api/jobs/{id}` polling endpoint; wizard polls every 3s
 - [ ] Job progress UI: current step, spinner, error surface
 
@@ -182,6 +184,39 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M3 prep: Ploi write-endpoint verification + spec corrections
+- **Docs**: Ploi API docs are at **https://developers.ploi.io** (the
+  `ploi.io/documentation/api` URL in PROJECT.md §5.1 404s). Updated the §5.1
+  prose URL and the endpoint table (approved by user 2026-11-20).
+- **Endpoint corrections (verified 2026-11-20 against developers.ploi.io):**
+  - Trigger deploy is **`POST /servers/{server}/sites/{id}/deploy`**, *not*
+    `POST /sites/{id}/deploy`. Returns `{ message, deployment_id }`; `422` when
+    the site has no repo / is already deploying / is WordPress.
+  - New **`GET /servers/{server}/sites/{site}/deployments/{deployment}`**
+    (added upstream 2026-11-11) reports `deploying` → `success`/`failed`. Added
+    to §5.1 — M3 uses it to drive `deploying → live`/`failed` itself.
+  - Site creation is **`POST /servers/{server}/sites`** with required
+    `root_domain` + `web_directory`; optional `project_type`, `system_user`,
+    `webserver_template`, `webhook_url`, `tags`, `deployment_type`.
+  - **`GET /webserver-templates`** (account-scoped) and
+    **`GET /servers/{server}/system-users`** added to §5.1 for wizard step 3.
+  - Rate limits are **60/120/240 req/min** (1–4 req/sec), not the 5 req/sec in
+    the old note; §5.1 now says to stay within the account tier and honour
+    `Retry-After` + `X-RateLimit-*`.
+- **Open question resolved**: M3's acceptance (`→ live`) no longer depends on
+  the M4 webhook — the deployment-poll path reaches `live`/`failed` inside M3;
+  M4's webhook remains the real-time reconciliation path.
+- **Decisions (user, 2026-11-20):** acceptance verification may **create the
+  site on live Ploi** (§5.1/§6 authorise the two M3 writes); include the
+  "Provision new server" checkbox (manual-Vultr message, §6 M3 step 3); the
+  plain M1 create form at `/projects/new` is **retired** in favour of the
+  wizard (agent's call).
+- **Scope note**: `project_type` options are `laravel`, `nodejs`, `statamic`,
+  `craft-cms`, `symfony`, `wordpress`, `octobercms`, `cakephp` — none is
+  Astro/Payload; the wizard will leave `project_type` unset (or `nodejs`) for
+  provider-agnostic client sites. Flag if this needs to be narrower.
+- **Status**: docs/spec updated only; M3 code not started (awaiting go-ahead).
 
 ### 2026-11-20 — M2 Ploi read-only integration (built; acceptance verification in progress)
 - **`lib/ploi/`**: `types.ts` (Zod, loose objects that tolerate extra fields),

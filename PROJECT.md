@@ -201,7 +201,7 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 
 **Base URL:** `https://ploi.io/api`
 **Auth:** Bearer token (`Authorization: Bearer <token>`)
-**Docs:** https://ploi.io/documentation/api — **the agent should verify exact endpoint shapes against these docs before implementing.**
+**Docs:** https://developers.ploi.io — **the agent should verify exact endpoint shapes against these docs before implementing.** (The old `ploi.io/documentation/api` URL 404s; docs moved to `developers.ploi.io`.)
 
 **Endpoints to integrate:**
 
@@ -210,9 +210,27 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 | List all monitored servers with stats | `GET /servers/monitored` | Metrics sync job, fleet overview |
 | Get single server | `GET /servers/{id}` | Dashboard detail |
 | List sites on a server | `GET /servers/{id}/sites` | Fleet sync |
-| Create a site | `POST /servers/{id}/sites` | Provisioning wizard |
-| Trigger deploy | `POST /sites/{id}/deploy` | Deploy action |
 | Get site | `GET /servers/{server}/sites/{id}` | Status check |
+| Create a site | `POST /servers/{server}/sites` | Provisioning wizard (M3) |
+| Trigger deploy | `POST /servers/{server}/sites/{id}/deploy` | Deploy action (M3/M4) |
+| Get deployment status | `GET /servers/{server}/sites/{site}/deployments/{deployment}` | Deploy polling |
+| List webserver templates | `GET /webserver-templates` | Wizard step 3 (template dropdown) |
+| List system users on a server | `GET /servers/{server}/system-users` | Wizard step 3 (optional) |
+
+**Create-site parameters** (`POST /servers/{server}/sites`): required
+`root_domain` (≤100 chars) and `web_directory` (must match `/[a-zA-Z0-9\/]/`);
+optional `project_type` (`laravel`, `nodejs`, `statamic`, `craft-cms`, `symfony`,
+`wordpress`, `octobercms`, `cakephp`), `system_user` (must exist on the server),
+`webserver_template` (integer ID from `GET /webserver-templates`),
+`webhook_url`, `tags`, and `deployment_type` (`default` | `custom`). The response
+echoes the new site (`data.id` is the `ploi_site_id`).
+
+**Deploy parameters** (`POST /servers/{server}/sites/{id}/deploy`): optional
+`scheduled` (datetime) and `variables` (object). Returns
+`{ message, deployment_id }`; poll `GET .../deployments/{deployment}` until the
+status is `success` or `failed` (`deploying` while it runs). A deploy returns
+`422` when the site has no repository, is already deploying, or is WordPress —
+so only deploy when a repository is configured.
 
 **Required Ploi API scopes on the token:** servers read, sites read/write, deployments write.
 
@@ -220,7 +238,10 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 - Wrap all Ploi calls in `lib/ploi/client.ts` with typed request/response models.
 - Include a `PloiError` class that surfaces HTTP status + body.
 - Add a **circuit breaker**: after 3 consecutive failures, pause the sync job and alert.
-- Rate-limit: Ploi has per-minute limits; use a simple token bucket (5 req/sec cap).
+- Rate-limit: Ploi caps at 60 / 120 / 240 requests per minute (Basic / Pro /
+  Unlimited), i.e. 1–4 req/sec — not 5. Keep the token bucket at or below the
+  account tier (5 req/sec exceeds Basic) and respect `Retry-After` plus the
+  `X-RateLimit-*` response headers on `429`.
 
 ### 5.2 Lighthouse CI (page scores)
 
@@ -305,16 +326,27 @@ The centerpiece. A multi-step wizard at `/projects/new`:
 **Step 2 — Project details:** Name, domain, repo URLs (CMS + Astro).
 **Step 3 — Infrastructure:**
   - Select existing Ploi server, **or** check "Provision new server" (v1: show a message that manual Vultr provisioning is required; auto-provision is Phase 2).
-  - Select web server template (dropdown populated from Ploi, cached).
+  - Select web server template (dropdown populated from Ploi via `GET /webserver-templates`, cached).
 **Step 4 — Review & Confirm:** Shows what will be created. Confirm triggers a `provision_site` job.
 
 **Job `provision_site`:**
 1. Create `project` row with status `provisioning`.
-2. Call `POST /servers/{id}/sites` with the domain, `project_type`, system user, webhook URL.
-3. Poll `GET /sites/{id}` until the site exists (max 5 min, exponential backoff).
-4. Update project with `ploi_site_id`, set status `deploying`.
-5. Trigger deploy via `POST /sites/{id}/deploy` (if repo configured).
-6. Ploi's site webhook (`/api/webhooks/ploi/deploy-complete`) updates status to `live` or `failed`.
+2. Call `POST /servers/{server}/sites` with `root_domain` (the domain) and
+   `web_directory`, plus `project_type` / `system_user` / `webserver_template` /
+   `webhook_url` as configured. Store the returned site `id` as
+   `ploi_site_id`.
+3. Poll `GET /servers/{server}/sites/{id}` until the site reports
+   `status: active` (max 5 min, exponential backoff).
+4. Set project status `deploying`.
+5. If a repo is configured, trigger deploy via
+   `POST /servers/{server}/sites/{id}/deploy`, then poll
+   `GET /servers/{server}/sites/{site}/deployments/{deployment}` until the
+   deployment is `success` (→ project `live`) or `failed` (→ project `failed`).
+   If no repo is configured, deploy is skipped and the project stays `live`
+   once the site is active.
+6. Ploi's site webhook (`/api/webhooks/ploi/deploy-complete`, M4) is the
+   real-time path that keeps `live`/`failed` in sync afterwards; M3 reaches
+   those states itself via the deployment poll so the wizard is self-contained.
 
 **UI:** Wizard step transitions use Server Actions + optimistic UI. Job progress shown via polling `/api/jobs/{id}` every 3s.
 
