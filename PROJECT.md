@@ -166,7 +166,7 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 // jobs  (simple DB-backed queue)
 {
   id: uuid PK
-  type: enum('provision_site', 'trigger_deploy', 'sync_server_metrics', 'pull_audit_logs', 'pull_page_scores')
+  type: enum('provision_site', 'trigger_deploy', 'sync_servers', 'sync_server_metrics', 'pull_audit_logs', 'pull_page_scores')
   payload: jsonb
   status: enum('pending', 'running', 'succeeded', 'failed')
   attempts: integer default 0

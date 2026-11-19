@@ -1,0 +1,1 @@
+ALTER TYPE "public"."job_type" ADD VALUE 'sync_servers' BEFORE 'sync_server_metrics';

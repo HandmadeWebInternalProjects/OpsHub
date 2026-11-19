@@ -39,6 +39,7 @@ export const cmsType = pgEnum("cms_type", ["payload", "strapi", "other"]);
 export const jobType = pgEnum("job_type", [
   "provision_site",
   "trigger_deploy",
+  "sync_servers",
   "sync_server_metrics",
   "pull_audit_logs",
   "pull_page_scores",
