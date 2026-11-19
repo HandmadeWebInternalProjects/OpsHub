@@ -55,11 +55,12 @@ Override seed credentials with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 
 Then open http://localhost:3000 and sign in.
 
-## Ploi integration & mocks (M2)
+## Ploi integration & mocks
 
-OpsHub talks to Ploi through a typed, **read-only** client (`lib/ploi/`). M2
-exposes only GET endpoints — it never mutates Ploi infrastructure (see the
-"Production safety" rule in `AGENTS.md`).
+OpsHub talks to Ploi through a typed client (`lib/ploi/`). The M2 read endpoints
+are joined by exactly two authorised writes — create site and trigger deploy
+(M3/M4). No delete/destroy/stop/reboot/scale call exists anywhere in the client
+(see the "Production safety" rule in `AGENTS.md`).
 
 - `USE_MOCKS=true` swaps in `lib/ploi/mock.ts`, so the app runs with no real
   Ploi credentials.
@@ -76,6 +77,31 @@ pnpm worker   # in a second terminal
 
 The worker also enqueues `sync_servers` every 5 minutes automatically.
 
+## Provisioning wizard (M3)
+
+`/projects/new` is a 4-step wizard (client → project details → infrastructure →
+review). Confirming enqueues a `provision_site` job; the **worker** performs the
+actual Ploi writes, so the app process never holds a write in flight:
+
+1. create the project row (`status = provisioning`);
+2. create the site (`POST /servers/{server}/sites`);
+3. poll the site until it is `active`;
+4. set `deploying`, trigger a deploy if a repo URL was given, and poll the
+   deployment to `live`/`failed`.
+
+The wizard polls `GET /api/jobs/{id}` every 3s and shows each step. A site is
+only ever created once: retries reuse the recorded `ploi_site_id`, or an
+existing site with the same domain. Ploi only deploys sites with a repository
+attached — if none is attached (this integration does not attach repos yet) the
+project is marked `live` without a deploy and the job says so.
+
+The plain create form is still available at `/projects/new?manual=1` for
+projects that should not create a Ploi site.
+
+To watch the full flow locally with no credentials, set `USE_MOCKS=true` and run
+the worker alongside the app; the mock adapter creates a site and reports the
+deployment as successful.
+
 ## Status
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
@@ -85,4 +111,7 @@ and projects, plus a project detail page.
 **M2 — Ploi read-only integration**: typed read-only Ploi client with a mock
 adapter, token-bucket rate limiter, circuit breaker, the `sync_servers` job +
 worker, a Servers page with **Sync now**, and project → Ploi server/site
-linking. Later milestones are tracked in `MILESTONES.md`.
+linking.
+**M3 — Provisioning wizard**: the `/projects/new` wizard, the `provision_site`
+job (create site → wait → deploy), the `GET /api/jobs/{id}` polling endpoint,
+and the job-progress UI. Later milestones are tracked in `MILESTONES.md`.

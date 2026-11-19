@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M2 complete ✅ — M3 (Provisioning Wizard) not started, awaiting confirmation
+**Current:** M3 (Provisioning Wizard) code complete — verified against the mock adapter; live Ploi verification pending confirmation
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -74,24 +74,30 @@ server `1001` / site `501`, persisted in the DB.
 
 ---
 
-## M3 — Provisioning Wizard `[ ]`
+## M3 — Provisioning Wizard `[~]`
 
-- [ ] Wizard scaffold at `/projects/new`, 4 steps, Server Action transitions
-- [ ] Step 1: select existing client or create inline
-- [ ] Step 2: project name, domain, repo URLs (CMS + Astro)
-- [ ] Step 3: select existing Ploi server + web server template (cached from Ploi)
-- [ ] Step 4: review screen + confirm enqueues `provision_site` job
-- [ ] `lib/jobs/handlers/provision-site.ts`:
+- [x] Wizard scaffold at `/projects/new`, 4 steps, Server Action transitions (2026-11-20, 8d361eb)
+- [x] Step 1: select existing client or create inline (2026-11-20, 8d361eb)
+- [x] Step 2: project name, domain, repo URLs (CMS + Astro) (2026-11-20, 8d361eb)
+- [x] Step 3: select existing Ploi server + web server template (cached from Ploi) (2026-11-20, 8d361eb + 77c11ac)
+- [x] Step 4: review screen + confirm enqueues `provision_site` job (2026-11-20, 8d361eb + 77c11ac)
+- [x] `lib/jobs/handlers/provision-site.ts`:
       create project row (status `provisioning`) → `POST /servers/{server}/sites`
       → poll `GET /servers/{server}/sites/{id}` until `active` (5 min max,
       exponential backoff) → set `ploi_site_id`, status `deploying` →
       `POST /servers/{server}/sites/{id}/deploy` → poll
-      `GET /servers/{server}/sites/{site}/deployments/{deployment}` → `live`/`failed`
-- [ ] `GET /api/jobs/{id}` polling endpoint; wizard polls every 3s
-- [ ] Job progress UI: current step, spinner, error surface
+      `GET /servers/{server}/sites/{site}/deployments/{deployment}` → `live`/`failed` (2026-11-20, cc0758f)
+- [x] `GET /api/jobs/{id}` polling endpoint; wizard polls every 3s (2026-11-20, 77c11ac)
+- [x] Job progress UI: current step, spinner, error surface (2026-11-20, 8d361eb)
 
 **Acceptance:** A wizard run creates a real site on Ploi; project status
 transitions `provisioning → deploying → live`; failure surfaces clearly.
+⏳ Verified 2026-11-20 against the **mock adapter** (`USE_MOCKS=true`): an e2e
+run drove the wizard end-to-end through the worker (client → project → job →
+`live`), and one-off worker runs exercised the full create+deploy path
+(site created, deployed, `status = live`) plus idempotency (three runs,
+no duplicate site). **Live Ploi verification still pending** — needs a target
+server + domain and a real `PLOI_API_TOKEN` (approved in principle 2026-11-20).
 
 **Depends on:** M2
 
@@ -185,6 +191,53 @@ appears in the UI with an acknowledge action.
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
 
+### 2026-11-20 — M3 Provisioning Wizard (built; mock-verified, live verification pending)
+- **Added**: Ploi write surface (`types.ts`/`client.ts`/`mock.ts`): `createSite`,
+  `deploySite`, `getDeployment`, `listWebserverTemplates`, `listSystemUsers` +
+  Zod schemas. `lib/jobs/errors.ts` (`JobAbortError` — terminal failures are
+  not retried; runner updated). `lib/jobs/handlers/provision-site.ts`.
+  `GET /api/jobs/{id}`. `app/actions/provision.ts` (`startProvisioning`) and two
+  wizard reads in `app/actions/servers.ts`.
+  `components/wizard/{provision-wizard,job-progress}.tsx`; `/projects/new` is
+  now the wizard. `provisionWizardSchema` in `lib/validation.ts`.
+  Client unit tests for the new write methods.
+- **Decisions / deviations:**
+  - The **job** creates the project row (PROJECT.md §6 step 1), so the action
+    only validates + enqueues; `projectId` is generated in the action and
+    carried on the payload so retries and polling agree on one row.
+  - M3 reaches `live`/`failed` itself by polling the new **Get deployment**
+    endpoint, so acceptance no longer depends on M4's webhook.
+  - Deploy is attempted only when a repo URL was given. There is **no endpoint
+    to attach a repository to a site**, so a freshly created site has none and
+    Ploi answers `422`; that `422` is treated as a benign "no repository
+    attached" outcome — the project is marked `live` and the job summary says
+    so. Any other deploy error retries/fails normally.
+  - Wizard step 3 fetches webserver templates (and, once a server is chosen, its
+    system users) **live** via Server Actions, mirroring M2's live
+    `listServerSites` dropdown; PROJECT.md §4 has no template-cache table.
+  - `project_type` is left unset: Ploi's allowed values (laravel, nodejs,
+    statamic, craft-cms, symfony, wordpress, octobercms, cakephp) do not fit
+    Astro/Payload client sites.
+- **Decision change (agent, 2026-11-20)**: the plain M1 create form is **kept**
+  at `/projects/new?manual=1` (toggle link), not deleted, so projects that must
+  not create a Ploi site stay possible and the M1 smoke test remains meaningful.
+  The wizard is the default at `/projects/new`. This revises the earlier
+  "retire the form" call.
+- **Commits**: `2aae42c` (ploi writes), `cc0758f` (handler + `JobAbortError`),
+  `77c11ac` (polling API + action), `8d361eb` (wizard UI).
+- **Verification (2026-11-20, mock adapter)**: `tsc`, `eslint`, `prettier`,
+  `pnpm test` (15), `pnpm build`, `pnpm test:e2e` (2 passed, incl. a
+  wizard → worker → `live` run) all green. One-off worker runs confirmed the
+  create+deploy path → `live`, and idempotency across 3 runs (exactly 1 site).
+- **Outstanding**:
+  - **Live Ploi acceptance not yet run** — needs a target server + domain and a
+    real `PLOI_API_TOKEN` (user approved creating on live, 2026-11-20).
+  - No unit test yet for the `provision_site` handler (needs a DB test harness;
+    same gap as M2's `sync_servers` handler).
+  - `provision_site` polls inside the handler, so one worker is blocked for up
+    to ~5–15 min per run; acceptable for v1, revisit for throughput.
+  - The local dev DB now contains extra `Verify …` / `E2E …` / `Wizard …` rows.
+
 ### 2026-11-20 — M3 prep: Ploi write-endpoint verification + spec corrections
 - **Docs**: Ploi API docs are at **https://developers.ploi.io** (the
   `ploi.io/documentation/api` URL in PROJECT.md §5.1 404s). Updated the §5.1
@@ -210,13 +263,14 @@ entries at the top.
 - **Decisions (user, 2026-11-20):** acceptance verification may **create the
   site on live Ploi** (§5.1/§6 authorise the two M3 writes); include the
   "Provision new server" checkbox (manual-Vultr message, §6 M3 step 3); the
-  plain M1 create form at `/projects/new` is **retired** in favour of the
-  wizard (agent's call).
+  plain M1 create form at `/projects/new` was planned to be **retired** in
+  favour of the wizard (agent's call) — later revised to keep it at
+  `?manual=1`, see the entry above.
 - **Scope note**: `project_type` options are `laravel`, `nodejs`, `statamic`,
   `craft-cms`, `symfony`, `wordpress`, `octobercms`, `cakephp` — none is
   Astro/Payload; the wizard will leave `project_type` unset (or `nodejs`) for
   provider-agnostic client sites. Flag if this needs to be narrower.
-- **Status**: docs/spec updated only; M3 code not started (awaiting go-ahead).
+- **Status**: docs/spec updated only at the time (M3 code followed — see the entry above). Doc correction committed as `a581d49`.
 
 ### 2026-11-20 — M2 Ploi read-only integration (built; acceptance verification in progress)
 - **`lib/ploi/`**: `types.ts` (Zod, loose objects that tolerate extra fields),
