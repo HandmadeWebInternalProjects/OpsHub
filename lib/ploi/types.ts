@@ -88,6 +88,62 @@ export function ploiEnvelope<T extends z.ZodType>(item: T) {
   return z.looseObject({ data: item });
 }
 
+/** A saved webserver template (`GET /webserver-templates`). */
+export const ploiWebserverTemplateSchema = z.looseObject({
+  id: z.number(),
+  label: z.string(),
+  content: z.string().nullish(),
+  created_at: z.string().nullish(),
+});
+
+/** A system user on a server (`GET /servers/{server}/system-users`). */
+export const ploiSystemUserSchema = z.looseObject({
+  id: z.number(),
+  name: z.string(),
+  root: z.string().nullish(),
+  created_at: z.string().nullish(),
+});
+
+/**
+ * A deployment (`GET /servers/{server}/sites/{site}/deployments/{deployment}`).
+ * While the deployment runs only `id` and `status` are populated.
+ */
+export const ploiDeploymentSchema = z.looseObject({
+  id: z.string(),
+  status: z.string(),
+  commit_hash: z.string().nullish(),
+  commit_message: z.string().nullish(),
+  source: z.string().nullish(),
+  human_source: z.string().nullish(),
+  created_at: z.string().nullish(),
+  log_id: looseNumber.nullish(),
+  log_url: z.string().nullish(),
+});
+
+/**
+ * Response of `POST /servers/{server}/sites/{id}/deploy`. Unlike other single
+ * resources this is NOT wrapped in `data`.
+ */
+export const ploiDeployResponseSchema = z.looseObject({
+  message: z.string().optional(),
+  deployment_id: z.string(),
+});
+
+/** Arguments for creating a site, in the camelCase used across OpsHub. */
+export type PloiCreateSiteInput = {
+  rootDomain: string;
+  webDirectory: string;
+  projectType?: string | null;
+  systemUser?: string | null;
+  webserverTemplate?: number | null;
+  webhookUrl?: string | null;
+};
+
+export type PloiDeployResult = {
+  message: string | null;
+  deploymentId: string;
+};
+
 export const ploiMonitoredServersResponseSchema = z.looseObject({
   data: z.array(ploiMonitoredServerSchema),
 });
@@ -96,6 +152,9 @@ export type PloiServer = z.infer<typeof ploiServerSchema>;
 export type PloiServerStatistic = z.infer<typeof ploiServerStatisticSchema>;
 export type PloiMonitoredServer = z.infer<typeof ploiMonitoredServerSchema>;
 export type PloiSite = z.infer<typeof ploiSiteSchema>;
+export type PloiWebserverTemplate = z.infer<typeof ploiWebserverTemplateSchema>;
+export type PloiSystemUser = z.infer<typeof ploiSystemUserSchema>;
+export type PloiDeployment = z.infer<typeof ploiDeploymentSchema>;
 
 export type PloiPaginated<T> = {
   data: T[];
@@ -108,12 +167,26 @@ export type PloiPaginated<T> = {
 };
 
 /**
- * The read surface OpsHub depends on. Both the real client and the mock
+ * The Ploi surface OpsHub depends on. Both the real client and the mock
  * implement this, so callers never care which is wired up (PROJECT.md §5.1).
+ *
+ * The write surface is deliberately tiny and scoped to the milestone that
+ * authorises it (AGENTS.md "Production safety"): `createSite` and `deploySite`
+ * are the only two M3/M4 write endpoints. No delete/destroy/stop/reboot call
+ * exists here on purpose.
  */
 export interface PloiApi {
   listMonitoredServers(): Promise<PloiMonitoredServer[]>;
   getServer(id: number): Promise<PloiServer>;
   listSites(serverId: number): Promise<PloiSite[]>;
   getSite(serverId: number, siteId: number): Promise<PloiSite>;
+  listWebserverTemplates(): Promise<PloiWebserverTemplate[]>;
+  listSystemUsers(serverId: number): Promise<PloiSystemUser[]>;
+  createSite(serverId: number, input: PloiCreateSiteInput): Promise<PloiSite>;
+  deploySite(serverId: number, siteId: number): Promise<PloiDeployResult>;
+  getDeployment(
+    serverId: number,
+    siteId: number,
+    deploymentId: string,
+  ): Promise<PloiDeployment>;
 }

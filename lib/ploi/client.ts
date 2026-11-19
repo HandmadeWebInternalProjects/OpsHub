@@ -7,15 +7,24 @@ import { CircuitBreaker } from "./circuit-breaker";
 import { PloiCircuitOpenError, PloiError } from "./errors";
 import { TokenBucketRateLimiter } from "./rate-limiter";
 import {
+  ploiDeployResponseSchema,
+  ploiDeploymentSchema,
   ploiEnvelope,
   ploiMonitoredServersResponseSchema,
   ploiPaginated,
   ploiServerSchema,
   ploiSiteSchema,
+  ploiSystemUserSchema,
+  ploiWebserverTemplateSchema,
   type PloiApi,
+  type PloiCreateSiteInput,
+  type PloiDeployResult,
+  type PloiDeployment,
   type PloiMonitoredServer,
   type PloiServer,
   type PloiSite,
+  type PloiSystemUser,
+  type PloiWebserverTemplate,
 } from "./types";
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -35,12 +44,13 @@ export type PloiClientOptions = {
 };
 
 /**
- * Typed, read-only client for the Ploi API.
+ * Typed client for the Ploi API.
  *
- * The M2 surface is intentionally read-only (PROJECT.md §5.1 + AGENTS.md
- * "Production safety"): it exposes only the GET endpoints M2 needs. Write
- * endpoints (create site, deploy) arrive with M3/M4 and must not be added here
- * without that milestone.
+ * The GET surface is the M2 read layer. The only writes are `createSite` and
+ * `deploySite` — the exact endpoints M3 authorises (PROJECT.md §5.1 + AGENTS.md
+ * "Production safety"). Critically, there is NO delete/destroy/stop/suspend/
+ * reboot/scale/terminate call here, and none may be added without a milestone
+ * that explicitly authorises it.
  */
 export class PloiClient implements PloiApi {
   private readonly token: string;
@@ -96,9 +106,84 @@ export class PloiClient implements PloiApi {
     return parsed.data;
   }
 
+  async listWebserverTemplates(): Promise<PloiWebserverTemplate[]> {
+    const parsed = await this.request(
+      "/webserver-templates",
+      ploiPaginated(ploiWebserverTemplateSchema),
+    );
+    return parsed.data;
+  }
+
+  async listSystemUsers(serverId: number): Promise<PloiSystemUser[]> {
+    const parsed = await this.request(
+      `/servers/${serverId}/system-users`,
+      ploiPaginated(ploiSystemUserSchema),
+    );
+    return parsed.data;
+  }
+
+  /**
+   * Create a site (`POST /servers/{server}/sites`). WRITE — authorised by M3.
+   * Only the documented create-site fields are ever sent.
+   */
+  async createSite(
+    serverId: number,
+    input: PloiCreateSiteInput,
+  ): Promise<PloiSite> {
+    const body: Record<string, unknown> = {
+      root_domain: input.rootDomain,
+      web_directory: input.webDirectory,
+    };
+    if (input.projectType) body.project_type = input.projectType;
+    if (input.systemUser) body.system_user = input.systemUser;
+    if (input.webserverTemplate != null) {
+      body.webserver_template = input.webserverTemplate;
+    }
+    if (input.webhookUrl) body.webhook_url = input.webhookUrl;
+
+    const parsed = await this.request(
+      `/servers/${serverId}/sites`,
+      ploiEnvelope(ploiSiteSchema),
+      { method: "POST", body },
+    );
+    return parsed.data;
+  }
+
+  /**
+   * Trigger a deployment (`POST /servers/{server}/sites/{id}/deploy`). WRITE —
+   * authorised by M3/M4. Returns the `deployment_id` to poll.
+   */
+  async deploySite(
+    serverId: number,
+    siteId: number,
+  ): Promise<PloiDeployResult> {
+    const parsed = await this.request(
+      `/servers/${serverId}/sites/${siteId}/deploy`,
+      ploiDeployResponseSchema,
+      { method: "POST" },
+    );
+    return {
+      message: parsed.message ?? null,
+      deploymentId: parsed.deployment_id,
+    };
+  }
+
+  async getDeployment(
+    serverId: number,
+    siteId: number,
+    deploymentId: string,
+  ): Promise<PloiDeployment> {
+    const parsed = await this.request(
+      `/servers/${serverId}/sites/${siteId}/deployments/${deploymentId}`,
+      ploiEnvelope(ploiDeploymentSchema),
+    );
+    return parsed.data;
+  }
+
   private async request<S extends z.ZodType>(
     endpoint: string,
     schema: S,
+    init: { method?: "GET" | "POST"; body?: unknown } = {},
   ): Promise<z.infer<S>> {
     if (!this.breaker.allowRequest()) {
       throw new PloiCircuitOpenError(this.breaker.retryAfterMs());
@@ -113,12 +198,13 @@ export class PloiClient implements PloiApi {
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
-        method: "GET",
+        method: init.method ?? "GET",
         headers: {
           Authorization: `Bearer ${this.token}`,
           Accept: "application/json",
           "Content-Type": "application/json",
         },
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
         signal: controller.signal,
       });
     } catch {

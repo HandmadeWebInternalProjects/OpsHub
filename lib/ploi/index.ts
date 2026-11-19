@@ -48,11 +48,19 @@ export {
   ploiServerSchema,
   ploiSiteSchema,
   ploiMonitoredServerSchema,
+  ploiWebserverTemplateSchema,
+  ploiSystemUserSchema,
+  ploiDeploymentSchema,
 } from "./types";
 export type {
   PloiApi,
+  PloiCreateSiteInput,
+  PloiDeployResult,
+  PloiDeployment,
   PloiMonitoredServer,
   PloiServer,
   PloiServerStatistic,
   PloiSite,
+  PloiSystemUser,
+  PloiWebserverTemplate,
 } from "./types";

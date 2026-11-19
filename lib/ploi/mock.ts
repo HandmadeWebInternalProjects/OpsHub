@@ -1,9 +1,48 @@
 import type {
   PloiApi,
+  PloiCreateSiteInput,
+  PloiDeployResult,
+  PloiDeployment,
   PloiMonitoredServer,
   PloiServer,
   PloiSite,
+  PloiSystemUser,
+  PloiWebserverTemplate,
 } from "./types";
+
+const WEBSERVER_TEMPLATES: PloiWebserverTemplate[] = [
+  {
+    id: 1,
+    label: "Default NGINX (Ploi)",
+    content: "# managed by Ploi",
+    created_at: "2025-01-01 00:00:00",
+  },
+  {
+    id: 2,
+    label: "Astro static site",
+    content: "# static file server",
+    created_at: "2025-01-01 00:00:00",
+  },
+];
+
+const SYSTEM_USERS: Record<number, PloiSystemUser[]> = {
+  1001: [
+    {
+      id: 1,
+      name: "ploi",
+      root: "/home/ploi",
+      created_at: "2025-01-01 00:00:00",
+    },
+  ],
+  1002: [
+    {
+      id: 2,
+      name: "ploi",
+      root: "/home/ploi",
+      created_at: "2025-01-01 00:00:00",
+    },
+  ],
+};
 
 /**
  * Deterministic Ploi fixture used when `USE_MOCKS=true` (PROJECT.md §10.3) so
@@ -139,6 +178,12 @@ const SITES: Record<number, PloiSite[]> = {
 };
 
 export class MockPloiClient implements PloiApi {
+  /** Mutable per-instance state so a mock provisioning run behaves like Ploi. */
+  private readonly sites: Record<number, PloiSite[]> = structuredClone(SITES);
+  private readonly deployments = new Map<string, PloiDeployment>();
+  private nextSiteId = 900;
+  private nextDeploymentSeq = 1;
+
   async listMonitoredServers(): Promise<PloiMonitoredServer[]> {
     return structuredClone(MONITORED);
   }
@@ -150,14 +195,98 @@ export class MockPloiClient implements PloiApi {
   }
 
   async listSites(serverId: number): Promise<PloiSite[]> {
-    return structuredClone(SITES[serverId] ?? []);
+    return structuredClone(this.sites[serverId] ?? []);
   }
 
   async getSite(serverId: number, siteId: number): Promise<PloiSite> {
-    const site = (SITES[serverId] ?? []).find((item) => item.id === siteId);
+    const site = (this.sites[serverId] ?? []).find(
+      (item) => item.id === siteId,
+    );
     if (!site) {
       throw new Error(`Mock Ploi: no site ${siteId} on server ${serverId}`);
     }
     return structuredClone(site);
   }
+
+  async listWebserverTemplates(): Promise<PloiWebserverTemplate[]> {
+    return structuredClone(WEBSERVER_TEMPLATES);
+  }
+
+  async listSystemUsers(serverId: number): Promise<PloiSystemUser[]> {
+    return structuredClone(SYSTEM_USERS[serverId] ?? []);
+  }
+
+  /** Mirrors `POST /servers/{server}/sites`; the mock site is immediately active. */
+  async createSite(
+    serverId: number,
+    input: PloiCreateSiteInput,
+  ): Promise<PloiSite> {
+    const site: PloiSite = {
+      id: this.nextSiteId++,
+      server_id: serverId,
+      status: "active",
+      domain: input.rootDomain,
+      deploy_script: false,
+      web_directory: input.webDirectory,
+      project_type: input.projectType ?? null,
+      project_root: "/",
+      last_deploy_at: null,
+      system_user: input.systemUser ?? "ploi",
+      php_version: "8.3",
+      health_url: null,
+      has_repository: true,
+      deployment_type: "default",
+      quick_deploy: false,
+      created_at: mockTimestamp(),
+    };
+    this.sites[serverId] = [...(this.sites[serverId] ?? []), site];
+    return structuredClone(site);
+  }
+
+  /** Mirrors `POST /servers/{server}/sites/{id}/deploy`; returns a deployment id. */
+  async deploySite(
+    serverId: number,
+    siteId: number,
+  ): Promise<PloiDeployResult> {
+    const site = (this.sites[serverId] ?? []).find(
+      (item) => item.id === siteId,
+    );
+    if (!site) {
+      throw new Error(`Mock Ploi: no site ${siteId} on server ${serverId}`);
+    }
+    const id = `mock-deploy-${this.nextDeploymentSeq++}`;
+    this.deployments.set(id, {
+      id,
+      status: "success",
+      commit_hash: null,
+      commit_message: null,
+      source: "api",
+      human_source: "API",
+      created_at: mockTimestamp(),
+      log_id: null,
+      log_url: null,
+    });
+    return {
+      message: `Site ${site.domain} has been queued for deployment`,
+      deploymentId: id,
+    };
+  }
+
+  async getDeployment(
+    serverId: number,
+    siteId: number,
+    deploymentId: string,
+  ): Promise<PloiDeployment> {
+    const deployment = this.deployments.get(deploymentId);
+    if (!deployment) {
+      throw new Error(
+        `Mock Ploi: no deployment ${deploymentId} on site ${siteId} (server ${serverId})`,
+      );
+    }
+    return structuredClone(deployment);
+  }
+}
+
+function mockTimestamp(): string {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
 }

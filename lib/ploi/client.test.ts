@@ -128,4 +128,73 @@ describe("PloiClient", () => {
     // The 4th call is blocked by the breaker and never reaches fetch.
     expect((fetchImpl as unknown as Mock).mock.calls).toHaveLength(3);
   });
+
+  it("creates a site with the documented body and server-scoped path", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({
+        data: { id: 42, server_id: 1, domain: "new.example.com" },
+      }),
+    );
+
+    const site = await clientWith(fetchImpl).createSite(1, {
+      rootDomain: "new.example.com",
+      webDirectory: "/public",
+      webserverTemplate: 3,
+    });
+    expect(site.id).toBe(42);
+
+    const calls = (fetchImpl as unknown as Mock).mock.calls;
+    expect(calls[0]?.[0]).toBe("https://ploi.test/api/servers/1/sites");
+    const init = calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({
+      root_domain: "new.example.com",
+      web_directory: "/public",
+      webserver_template: 3,
+    });
+  });
+
+  it("posts to the server-scoped deploy path and returns the deployment id", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({ message: "queued", deployment_id: "dep-1" }),
+    );
+
+    const result = await clientWith(fetchImpl).deploySite(1, 7);
+    expect(result.deploymentId).toBe("dep-1");
+
+    const calls = (fetchImpl as unknown as Mock).mock.calls;
+    expect(calls[0]?.[0]).toBe(
+      "https://ploi.test/api/servers/1/sites/7/deploy",
+    );
+    expect((calls[0]?.[1] as RequestInit).method).toBe("POST");
+  });
+
+  it("reads a deployment status", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({ data: { id: "dep-1", status: "deploying" } }),
+    );
+
+    const deployment = await clientWith(fetchImpl).getDeployment(1, 7, "dep-1");
+    expect(deployment.status).toBe("deploying");
+
+    const calls = (fetchImpl as unknown as Mock).mock.calls;
+    expect(calls[0]?.[0]).toBe(
+      "https://ploi.test/api/servers/1/sites/7/deployments/dep-1",
+    );
+  });
+
+  it("lists webserver templates", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({
+        data: [{ id: 1, label: "Magento webserver" }],
+        meta: { current_page: 1, last_page: 1, per_page: 15, total: 1 },
+      }),
+    );
+
+    const templates = await clientWith(fetchImpl).listWebserverTemplates();
+    expect(templates).toEqual([{ id: 1, label: "Magento webserver" }]);
+
+    const calls = (fetchImpl as unknown as Mock).mock.calls;
+    expect(calls[0]?.[0]).toBe("https://ploi.test/api/webserver-templates");
+  });
 });
