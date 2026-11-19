@@ -5,7 +5,7 @@ Ambient rules for every session, regardless of which agent is active.
 ## Project
 Internal client operations platform. Next.js 15 (App Router) + TypeScript strict
 + PostgreSQL + Drizzle + Auth.js. Orchestrates Ploi-managed Vultr infrastructure
-for client Strapi + Astro projects. See PROJECT.md for full spec.
+for client content-backend (Payload/Strapi) + Astro projects. See PROJECT.md for full spec.
 
 ## Source of truth
 - **PROJECT.md** = the constitution. Scope, architecture, data model, integration
@@ -28,7 +28,7 @@ for client Strapi + Astro projects. See PROJECT.md for full spec.
 ## Code conventions
 - TypeScript strict. **No `any`** in `lib/`, `app/api/`, `app/actions/`.
 - Zod at every external boundary: webhook payloads, Ploi API responses,
-  Strapi API responses, form inputs.
+  CMS API responses, form inputs.
 - Server Actions return `{ ok: true, data } | { ok: false, error }`. Never throw
   to the client.
 - All external API calls go through a typed wrapper in `lib/<service>/client.ts`.

@@ -7,14 +7,14 @@ Below is a detailed, implementation-ready spec you can drop into your OpenCode h
 ## 1. Overview
 
 **Project name:** OpsHub (working title)
-**Purpose:** An internal-only web application that orchestrates and observes client projects hosted on Ploi-managed Vultr infrastructure. It is the single source of truth for the lifecycle of every client site (Strapi backend + Astro frontend).
+**Purpose:** An internal-only web application that orchestrates and observes client projects hosted on Ploi-managed Vultr infrastructure. It is the single source of truth for the lifecycle of every client site (content backend — Payload or Strapi — plus an Astro frontend).
 
 **Primary user:** Internal operations engineers and developers on the team. **Not** a client-facing portal (explicitly deferred).
 
 **Core value delivered:**
 1. **Provisioning:** A wizard that creates a new client project end-to-end via the Ploi API.
 2. **Fleet visibility:** A single dashboard showing the health, page scores, and recent security activity of every client project.
-3. **Audit trail:** A summary of Strapi audit events per client, surfaced in the dashboard.
+3. **Audit trail:** A summary of content-backend audit events per client, surfaced in the dashboard.
 4. **State of record:** A canonical database mapping clients → projects → Ploi server/site IDs → domains.
 
 **Non-goals (explicitly out of scope for v1):**
@@ -23,7 +23,7 @@ Below is a detailed, implementation-ready spec you can drop into your OpenCode h
 - Full log aggregation, search, or a SIEM
 - Building an APM / distributed tracing system
 - Building a full uptime checker (integrate an existing one)
-- Multi-tenant Strapi (assume one Strapi instance per client for v1)
+- Multi-tenant content backends (assume one instance per client for v1)
 
 ---
 
@@ -67,7 +67,7 @@ Below is a detailed, implementation-ready spec you can drop into your OpenCode h
 │              ┌───────────▼───────────┐              │
 │              │   Integration Layer   │              │
 │              │  (Ploi, Lighthouse,   │              │
-│              │   Strapi, Uptime)     │              │
+│              │   CMS, Uptime)        │              │
 │              └───────────┬───────────┘              │
 │                          │                          │
 │              ┌───────────▼───────────┐              │
@@ -77,11 +77,11 @@ Below is a detailed, implementation-ready spec you can drop into your OpenCode h
                           │
         ┌─────────────────┼──────────────────┐
         ▼                 ▼                  ▼
-    Ploi API         Lighthouse CI      Strapi audit
+    Ploi API         Lighthouse CI      CMS audit
    (external)        (webhook in)       (API pull)
 ```
 
-**Key principle:** OpsHub **collects and aggregates**; it does not run monitoring itself. All metrics come from external sources (Ploi, Lighthouse, Strapi plugins) via API pulls or webhooks.
+**Key principle:** OpsHub **collects and aggregates**; it does not run monitoring itself. All metrics come from external sources (Ploi, Lighthouse, content-backend plugins) via API pulls or webhooks.
 
 ---
 
@@ -107,11 +107,12 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
   name: text
   slug: text unique
   domain: text unique
+  cms_type: enum('payload', 'strapi', 'other')  // content backend
   ploi_server_id: integer nullable
   ploi_site_id: integer nullable
-  strapi_url: text nullable
+  cms_url: text nullable
   astro_repo_url: text nullable
-  strapi_repo_url: text nullable
+  cms_repo_url: text nullable
   status: enum('draft', 'provisioning', 'deploying', 'live', 'failed', 'archived')
   provisioning_job_id: uuid nullable
 }
@@ -151,7 +152,7 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
   report_url: text nullable
 }
 
-// audit_summaries  (rolled up from Strapi)
+// audit_summaries  (rolled up from the content backend)
 {
   id: uuid PK
   project_id: uuid FK -> projects
@@ -232,16 +233,32 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 
 **Acceptance:** A malformed or unsigned payload is rejected with 401. A valid payload creates exactly one `page_scores` row and triggers a dashboard revalidation.
 
-### 5.3 Strapi audit logs
+### 5.3 Content-backend audit logs
 
-Use the community plugin `strapi-cms-audit-log` on each Strapi instance. Expose its read API via a dedicated Strapi API token (read-only).
+OpsHub pulls audit/activity events through a provider interface in `lib/cms/`,
+mirroring the uptime provider (§5.4):
 
-**Flow:** A recurring job (`pull_audit_logs`) runs every 15 minutes per project. For each project with a `strapi_url` and configured API token:
+    interface CmsProvider {
+      listAuditEvents(project, since): Promise<AuditEvent[]>
+    }
+
+Implementations: `PayloadProvider` (default), `StrapiProvider` (uses the
+community plugin `strapi-cms-audit-log`), and `NullCmsProvider` for projects
+without an audit source (v1 default).
+
+**Flow:** A recurring job (`pull_audit_logs`) runs every 15 minutes per project.
+For each project with a `cms_url` and a configured API token:
 1. Fetch the last 50 audit events since the last successful sync.
-2. Map to `audit_summaries` rows (deduplicated by Strapi event ID — add a `external_id` column).
+2. Map to `audit_summaries` rows (deduplicated by the backend event ID — the
+   `external_id` column).
 3. Store only the summary fields; do not store raw diffs.
 
-**Phase 2:** Store secrets per-project in `integration_config` keyed by `strapi_token_{project_id}`.
+**Phase 2:** Store secrets per-project in `integration_config` keyed by
+`cms_token_{project_id}`.
+
+**Payload:** its audit/activity source is TBD. M7 ships behind
+`NullCmsProvider` until the Payload adapter is defined and verified against
+Payload's docs.
 
 ### 5.4 Uptime monitoring (deferred integration point)
 
@@ -270,7 +287,7 @@ Each milestone is **independently shippable** and should be reviewed before star
 
 ### M1 — Client & Project CRUD
 - CRUD pages for `clients` and `projects`.
-- Project detail page shows domain, status, links to Strapi admin / Git repo (if set).
+- Project detail page shows domain, status, links to the content-backend admin / Git repo (if set).
 - Server Actions for create/update/archive.
 - **Done when:** you can manually create a client and a project (without Ploi integration) and see it listed.
 
@@ -285,7 +302,7 @@ Each milestone is **independently shippable** and should be reviewed before star
 The centerpiece. A multi-step wizard at `/projects/new`:
 
 **Step 1 — Client:** Select existing client or create inline.
-**Step 2 — Project details:** Name, domain, repo URLs (Strapi + Astro).
+**Step 2 — Project details:** Name, domain, repo URLs (CMS + Astro).
 **Step 3 — Infrastructure:**
   - Select existing Ploi server, **or** check "Provision new server" (v1: show a message that manual Vultr provisioning is required; auto-provision is Phase 2).
   - Select web server template (dropdown populated from Ploi, cached).
@@ -324,10 +341,10 @@ The centerpiece. A multi-step wizard at `/projects/new`:
 - **Done when:** a test POST via the reference script populates the chart.
 
 ### M7 — Audit summaries
-- `pull_audit_logs` job runs every 15 min for projects with a `strapi_url` + token.
+- `pull_audit_logs` job runs every 15 min for projects with a `cms_url` + token.
 - Project detail page shows "Recent security activity" (last 20 events).
-- Settings page for per-project Strapi API token (stored in `integration_config`, encrypted with a key from env).
-- **Done when:** a login-failure on a test Strapi appears in OpsHub within 15 min.
+- Settings page for per-project CMS API token (stored in `integration_config`, encrypted with a key from env).
+- **Done when:** a login-failure on a test content backend appears in OpsHub within 15 min.
 
 ### M8 — Alerting
 - Alert rules stored in a new `alert_rules` table: `(project_id nullable, rule_type, threshold, channel)`.
@@ -372,6 +389,11 @@ opshub/
 │   ├── ploi/
 │   │   ├── client.ts
 │   │   └── types.ts
+│   ├── cms/
+│   │   ├── provider.ts                   # CmsProvider interface + types
+│   │   ├── null-provider.ts              # v1 default
+│   │   ├── payload.ts                    # M7
+│   │   └── strapi.ts                     # M7
 │   ├── uptime/
 │   │   ├── provider.ts                   # interface
 │   │   └── null-provider.ts
@@ -445,7 +467,7 @@ All validated through `lib/env.ts` with Zod. The app **must fail fast** on start
 ## 10. Development Workflow (for the OpenCode agent)
 
 1. **Work one milestone at a time.** Open a branch `feat/m{N}-<slug>`. Commit incrementally.
-2. **Before implementing any external integration (Ploi, Strapi), fetch the current API docs** at the URL in §5.1 / §5.3 and adjust the typed client if shapes differ. Do not invent endpoints.
+2. **Before implementing any external integration (Ploi, Payload/Strapi), fetch the current API docs** at the URL in §5.1 / §5.3 and adjust the typed client if shapes differ. Do not invent endpoints.
 3. **Provide a mock adapter** for each external service (`lib/ploi/mock.ts`) so the app runs locally without real credentials. Env var `USE_MOCKS=true` switches the DI container.
 4. **Every milestone ends with:** migrations applied, seed data exists, README section updated, and a demoable UI state.
 5. **Ask before adding dependencies** beyond the §2 stack. Prefer small, well-maintained packages.
@@ -459,7 +481,7 @@ All validated through `lib/env.ts` with Zod. The app **must fail fast** on start
 - [ ] A user can create a client, then run the wizard to provision a real Ploi site, and watch status go `provisioning → deploying → live`.
 - [ ] The dashboard shows live server vitals for every Ploi server.
 - [ ] A Lighthouse POST to the webhook appears as a page score on the correct project.
-- [ ] A Strapi login failure appears in the project's audit panel within 15 minutes.
+- [ ] A content-backend login failure appears in the project's audit panel within 15 minutes.
 - [ ] A configured alert rule delivers to Slack.
 - [ ] All secrets are encrypted at rest; no secret appears in logs or client bundles.
 - [ ] `pnpm test` and `pnpm test:e2e` pass in CI.
