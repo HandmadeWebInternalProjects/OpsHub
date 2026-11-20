@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { PloiLinkForm } from "@/components/projects/ploi-link-form";
 import { ArchiveProjectButton } from "@/components/projects/archive-project-button";
+import { AuditActivity } from "@/components/projects/audit-activity";
 import { DeployTimeline } from "@/components/projects/deploy-timeline";
 import { RedeployButton } from "@/components/projects/redeploy-button";
 import { ProjectForm } from "@/components/projects/project-form";
@@ -24,6 +25,7 @@ import { db } from "@/lib/db";
 import {
   clients,
   deployEvents,
+  auditSummaries,
   pageScores,
   projects,
   servers,
@@ -120,6 +122,13 @@ export default async function ProjectDetailPage({
     seo: row.seo,
   }));
   const latestScore = scoreRows.at(-1);
+
+  const auditEvents = await db
+    .select()
+    .from(auditSummaries)
+    .where(eq(auditSummaries.projectId, id))
+    .orderBy(desc(auditSummaries.capturedAt))
+    .limit(20);
 
   return (
     <div className="flex flex-col gap-6">
@@ -246,6 +255,8 @@ export default async function ProjectDetailPage({
           )}
         </CardContent>
       </Card>
+
+      <AuditActivity events={auditEvents} />
 
       <DeployTimeline events={deployTimeline} />
     </div>

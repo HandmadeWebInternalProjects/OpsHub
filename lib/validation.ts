@@ -68,6 +68,18 @@ export const ploiLinkSchema = z.object({
 
 export type PloiLinkInput = z.infer<typeof ploiLinkSchema>;
 
+/** Per-project content-backend audit token (M7). */
+export const cmsTokenSchema = z.object({
+  projectId: z.uuid("Select a project"),
+  token: z
+    .string()
+    .trim()
+    .min(1, "Token is required")
+    .max(500, "Token is too long"),
+});
+
+export type CmsTokenInput = z.infer<typeof cmsTokenSchema>;
+
 /**
  * The provisioning wizard (M3): everything needed to queue a `provision_site`
  * job. Builds on the project fields and adds the infrastructure choices.
