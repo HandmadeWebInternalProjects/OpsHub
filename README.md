@@ -323,12 +323,12 @@ each can be **acknowledged**.
 
 ### Rules
 
-| Rule type                 | Fires when                          | Threshold |
-| ------------------------- | ----------------------------------- | --------- |
-| `server_disk_pct`         | disk usage **above** the threshold  | required  |
-| `page_score_performance`  | performance **below** the threshold | required  |
-| `deploy_failed`           | any deployment fails                | none      |
-| `audit_login_failed_count`| > threshold failed logins in 1 hour | required  |
+| Rule type                  | Fires when                          | Threshold |
+| -------------------------- | ----------------------------------- | --------- |
+| `server_disk_pct`          | disk usage **above** the threshold  | required  |
+| `page_score_performance`   | performance **below** the threshold | required  |
+| `deploy_failed`            | any deployment fails                | none      |
+| `audit_login_failed_count` | > threshold failed logins in 1 hour | required  |
 
 A rule is **fleet-wide** (no project) or scoped to one project. Evaluation runs
 inline on the event that produced the data:
@@ -350,9 +350,9 @@ Each rule has a `channel` and an optional `destination`:
 
 - **webhook** — POSTs `{ "text": "…" }`. Slack and Google Chat incoming
   webhooks both understand this shape, so one implementation covers both. The
-destination is the rule's own URL, falling back to `SLACK_WEBHOOK_URL`.
+  destination is the rule's own URL, falling back to `SLACK_WEBHOOK_URL`.
 - **email** — sent through **Resend** using `RESEND_API_KEY`; the recipient is
-the rule's destination and the sender is `ALERT_EMAIL_FROM`.
+  the rule's destination and the sender is `ALERT_EMAIL_FROM`.
 
 Delivery success/failure is recorded on the alert (`delivered_at` /
 `delivery_error`) and shown on the Alerts page. A delivery failure never loses

@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M7 complete ✅ — M8 (Alerting) not started
+**Current:** M8 complete ✅ — all v1 milestones complete
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -209,17 +209,29 @@ the audit-contract client (auth header, `since`/`limit`, error/bad-shape paths).
 
 ---
 
-## M8 — Alerting `[ ]`
+## M8 — Alerting `[x]`
 
-- [ ] `alert_rules` table: (project_id nullable, rule_type, threshold, channel)
-- [ ] Rule types: `server_disk_pct`, `page_score_performance`, `deploy_failed`,
-      `audit_login_failed_count`
-- [ ] Delivery: webhook (Slack/Discord-compatible) + email (Resend)
-- [ ] Alerts sidebar section with acknowledge action
-- [ ] Evaluation runs on each metrics / audit / deploy event
+- [x] `alert_rules` table: `(project_id nullable, rule_type, threshold, channel)`
+      plus `destination` + `enabled`, and an `alerts` table for fired alerts
+      (2026-11-20, 27453b2)
+- [x] Rule types: `server_disk_pct`, `page_score_performance`, `deploy_failed`,
+      `audit_login_failed_count` (2026-11-20, 27453b2 + 48e4d6a)
+- [x] Delivery: webhook (Slack/Discord-compatible) + email (Resend)
+      (2026-11-20, 48e4d6a) — the webhook posts `{ text }`, which Google Chat
+      incoming webhooks also accept; email uses the `resend` SDK
+- [x] Alerts sidebar section with acknowledge action (2026-11-20, 181e5dd)
+- [x] Evaluation runs on each metrics / audit / deploy event (2026-11-20,
+      48e4d6a) — plus the page-score webhook; inline, no new job type
 
 **Acceptance:** A configured rule fires and delivers to Slack; the alert
-appears in the UI with an acknowledge action.
+appears in the UI with an acknowledge action. ✅ Verified 2026-11-20 under the
+**mock adapter** (like M2/M5/M7): `pnpm test:e2e` (6 passed) creates a project,
+sets its audit token, creates an `audit_login_failed_count` rule, queues
+`pull_audit_logs`, and asserts the worker fires the alert, records delivery, and
+shows it on `/alerts` with a working **Acknowledge** action. The real webhook
+payload and the email path are unit-tested (mocked `fetch`, missing
+`RESEND_API_KEY`). A real Google Chat/Slack space and a real Resend send were
+not exercised — see Session Log.
 
 **Depends on:** M5, M6, M7
 
@@ -229,6 +241,53 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M8 Alerting (built; acceptance verified under mocks)
+- **Added:** §4 tables `alert_rules` + `alerts` (migration
+  `0005_glorious_clea.sql`; the `alerts.dedupe_key` uniqueness is a **partial**
+  unique index `WHERE status = 'open'`, so a subject re-fires after
+  acknowledgement). `lib/alerts/` — `deliver.ts` (`buildWebhookPayload`,
+  `HttpAlertDelivery` webhook-via-`fetch` + email-via-`resend`,
+  `MockAlertDelivery`, `getAlertDelivery`), `evaluate.ts` (pure `shouldFire` +
+  `evaluateServerDisk` / `evaluatePageScore` / `evaluateDeployFailed` /
+  `evaluateAuditLoginFailed`, all feeding a shared `recordAndDeliver` that dedupes
+  then delivers), `labels.ts`. `app/actions/alerts.ts`
+  (create/enable/delete rule, acknowledge alert); `alertRuleFormSchema` in
+  `lib/validation.ts`; the Settings **Alert rules** card; the `/alerts` page with
+  acknowledge; a sidebar **Alerts** item with an open-count badge
+  (`app/(app)/layout.tsx`).
+- **Decisions (user, 2026-11-20):** (1) schemas as proposed; (2) evaluation runs
+  **inline** in each event handler (no `evaluate_alerts` job / §4 enum change);
+  (3) add the `resend` package (§2 dependency addition, approved); (4) suppression
+  = one open alert per rule+subject; (5) verify with the mock delivery adapter.
+  Google Chat was raised as the delivery target — an incoming webhook accepts
+  `{ text }` like Slack, so the generic webhook channel covers it; kept
+  `SLACK_WEBHOOK_URL` as the default destination (no §8 rename).
+- **Spec changes (user-approved 2026-11-20):** PROJECT.md §4 gains `alert_rules`
+  and `alerts` (+ the three enums); §8 gains `ALERT_EMAIL_FROM`. §6 M8 wording is
+  unchanged (Slack-compatible webhook).
+- **Evaluation wiring:** `sync_server_metrics` (disk, per server, project IDs
+  grouped by `ploi_server_id`), `pull_audit_logs` (login-failed count in 1h),
+  `trigger_deploy` / `provision_site` / the Ploi webhook (deploy failed), and the
+  Lighthouse webhook (performance). Evaluation failures are logged and isolated so
+  they never fail the source job/request.
+- **Commits:** `27453b2` (schema + migration + PROJECT.md §4 + resend dep),
+  `48e4d6a` (lib/alerts + event wiring + env/tests), `181e5dd` (actions + UI +
+  sidebar), `ddd7119` (e2e + README), and this docs commit.
+- **Verification (2026-11-20):** `tsc --noEmit`, `eslint`, `prettier`,
+  `pnpm test` (56 — +6 delivery, +5 evaluation), `pnpm build`, `pnpm test:e2e`
+  (6 passed, incl. the alert lifecycle) all green. The suite ran against a clean
+  production server on :3100 (`PORT=3100 E2E_BASE_URL=http://localhost:3100`) to
+  avoid the leftover :3000 process.
+- **Outstanding / follow-up:**
+  - No **real** webhook/Resend delivery was exercised: acceptance used
+    `USE_MOCKS=true` (mock delivery records the alert as delivered without a
+    network call). A real Google Chat/Slack space + a verified Resend sender are
+    outstanding (same standard as M2/M5/M7).
+  - The alert handlers have no DB unit test (DB test harness still missing — same
+    gap as `sync_servers` / `provision_site`); the pure pieces (`shouldFire`,
+    `buildWebhookPayload`, the HTTP delivery error paths) are unit-tested and the
+    end-to-end path is covered by Playwright.
 
 ### 2026-11-20 — M7 Audit summaries (built; acceptance verified)
 - **Added:** `lib/crypto.ts` (AES-256-GCM, `iv:tag:ciphertext`, key from
