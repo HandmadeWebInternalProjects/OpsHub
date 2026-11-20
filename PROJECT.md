@@ -178,6 +178,37 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
   created_at / updated_at: timestamp
 }
 
+// alert_rules  (alerting config — M8)
+{
+  id: uuid PK
+  project_id: uuid FK -> projects nullable  // null = fleet-wide (e.g. disk)
+  rule_type: enum('server_disk_pct', 'page_score_performance', 'deploy_failed', 'audit_login_failed_count')
+  threshold: numeric nullable        // null for deploy_failed
+  channel: enum('webhook', 'email')
+  destination: text nullable         // per-rule webhook URL / email; null = env default
+  enabled: boolean default true
+  created_at / updated_at: timestamp
+}
+
+// alerts  (fired alerts, with acknowledge state — M8)
+{
+  id: uuid PK
+  rule_id: uuid FK -> alert_rules
+  project_id: uuid FK -> projects nullable
+  server_id: uuid FK -> servers nullable   // set for server-scoped rules
+  rule_type: enum('server_disk_pct', 'page_score_performance', 'deploy_failed', 'audit_login_failed_count')
+  status: enum('open', 'acknowledged')
+  title: text
+  detail: text
+  dedupe_key: text                   // rule + subject; unique among open alerts (partial index)
+  triggered_at: timestamp
+  acknowledged_at: timestamp nullable
+  acknowledged_by: text nullable     // user email
+  delivered_at: timestamp nullable
+  delivery_error: text nullable
+  created_at / updated_at: timestamp
+}
+
 // jobs  (simple DB-backed queue)
 {
   id: uuid PK

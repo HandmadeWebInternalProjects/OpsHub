@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   numeric,
@@ -6,8 +7,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Shared created_at / updated_at columns for every table (PROJECT.md §4). */
 const timestamps = {
@@ -59,6 +62,17 @@ export const deployEventType = pgEnum("deploy_event_type", [
   "deploy_completed",
   "deploy_failed",
 ]);
+
+export const alertRuleType = pgEnum("alert_rule_type", [
+  "server_disk_pct",
+  "page_score_performance",
+  "deploy_failed",
+  "audit_login_failed_count",
+]);
+
+export const alertChannel = pgEnum("alert_channel", ["webhook", "email"]);
+
+export const alertStatus = pgEnum("alert_status", ["open", "acknowledged"]);
 
 // clients
 export const clients = pgTable("clients", {
@@ -182,6 +196,61 @@ export const deployEvents = pgTable("deploy_events", {
   ...timestamps,
 });
 
+// alert_rules (alerting config — M8)
+export const alertRules = pgTable("alert_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // null = fleet-wide (e.g. a disk rule that applies to every server)
+  projectId: uuid("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  ruleType: alertRuleType("rule_type").notNull(),
+  // null for rules with no numeric bound (deploy_failed).
+  threshold: numeric("threshold", { precision: 10, scale: 2 }),
+  channel: alertChannel("channel").notNull().default("webhook"),
+  // Per-rule webhook URL / email address; null falls back to the env default.
+  destination: text("destination"),
+  enabled: boolean("enabled").notNull().default(true),
+  ...timestamps,
+});
+
+// alerts (fired alerts, with acknowledge state — M8)
+export const alerts = pgTable(
+  "alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ruleId: uuid("rule_id")
+      .notNull()
+      .references(() => alertRules.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    serverId: uuid("server_id").references(() => servers.id, {
+      onDelete: "cascade",
+    }),
+    // Denormalised for display/filtering without a join.
+    ruleType: alertRuleType("rule_type").notNull(),
+    status: alertStatus("status").notNull().default("open"),
+    title: text("title").notNull(),
+    detail: text("detail").notNull(),
+    // rule + subject; unique among *open* alerts (partial index below) so a
+    // subject can re-fire after its previous alert is acknowledged.
+    dedupeKey: text("dedupe_key").notNull(),
+    triggeredAt: timestamp("triggered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    acknowledgedBy: text("acknowledged_by"),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    deliveryError: text("delivery_error"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("alerts_dedupe_open_unique")
+      .on(table.dedupeKey)
+      .where(sql`${table.status} = 'open'`),
+  ],
+);
+
 // jobs (simple DB-backed queue)
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -233,3 +302,7 @@ export type PageScore = typeof pageScores.$inferSelect;
 export type NewPageScore = typeof pageScores.$inferInsert;
 export type AuditSummary = typeof auditSummaries.$inferSelect;
 export type NewAuditSummary = typeof auditSummaries.$inferInsert;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type NewAlertRule = typeof alertRules.$inferInsert;
+export type Alert = typeof alerts.$inferSelect;
+export type NewAlert = typeof alerts.$inferInsert;
