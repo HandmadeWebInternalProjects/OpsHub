@@ -138,8 +138,8 @@ notification cannot double-count.
 - **Fleet summary** — cached servers, live projects and failing projects.
 - **Server cards** — the latest CPU, RAM, disk and load for each cached server,
   each with a 7-day sparkline built from `metrics_snapshots`. The sparkline is a
-  small inline SVG (`components/charts/sparkline.tsx`); no charting dependency
-  is pulled in yet.
+  small inline SVG (`components/charts/sparkline.tsx`); `recharts` is used only
+  for the M6 page-score chart.
 - **Project health** — status, last deploy and latest page score per project.
 
 The `sync_server_metrics` job runs every 5 minutes alongside `sync_servers`: it
@@ -149,6 +149,52 @@ older than 90 days. Ploi reports RAM as a **percentage** (not MB), so it is
 stored in `metrics_snapshots.ram_pct`; `ram_used_mb` remains for real MB data if
 a source appears later. The mock adapter advances its datapoints over time, so
 sparklines trend locally.
+
+## Page scores (M6)
+
+Each client Astro pipeline can report Lighthouse CI scores to OpsHub; the
+project detail page then charts the last 30 days.
+
+### Reference client
+
+`scripts/lighthouse-reporter.mjs` is the reference client — copy it into the
+client's CI. Run it after `lhci autorun` (it reads the local
+`.lighthouseci/lhr-*.json` results), with these env vars:
+
+| Variable                    | Purpose                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| `OPSHUB_URL`                | OpsHub base URL (default `http://localhost:3000`)                                     |
+| `OPSHUB_PROJECT_ID`         | the project's id (from `/projects/{id}`)                                              |
+| `LIGHTHOUSE_WEBHOOK_SECRET` | must match the OpsHub env var                                                         |
+| `OPSHUB_PAGE_URL`           | optional — only report the run for this URL                                           |
+| `OPSHUB_EXTERNAL_ID`        | optional idempotency key (default `LHCI_BUILD_CONTEXT__EXTERNAL_BUILD_ID`)            |
+| `OPSHUB_REPORT_URL`         | optional link to the hosted report (default `LHCI_BUILD_CONTEXT__EXTERNAL_BUILD_URL`) |
+| `LHCI_RESULTS_DIR`          | optional results directory (default `./.lighthouseci`)                                |
+
+```bash
+# GitHub Actions, after `lhci autorun`
+OPSHUB_URL=https://opshub.example.com \
+OPSHUB_PROJECT_ID=<project-uuid> \
+LIGHTHOUSE_WEBHOOK_SECRET=${{ secrets.OPSHUB_LIGHTHOUSE_SECRET }} \
+node scripts/lighthouse-reporter.mjs
+```
+
+### Webhook
+
+The reporter POSTs to `POST /api/webhooks/lighthouse/{projectId}` and signs the
+raw body with HMAC-SHA256:
+
+```
+X-OpsHub-Signature: sha256=<hex hmac of the raw body>
+```
+
+Set `LIGHTHOUSE_WEBHOOK_SECRET` in `.env` (a long random string). The endpoint
+rejects a missing/incorrect signature with `401` (and `503` if the secret is
+unset). Writes are deduplicated on `page_scores.external_id` — the reporter's
+`external_id` when sent, otherwise a hash of the body — so a repeated identical
+POST cannot create a second row. The project detail page shows the score chart
+over the last 30 days, and the dashboard's project-health table shows the latest
+performance score.
 
 ## Status
 
@@ -170,4 +216,4 @@ reconciled against the Ploi API, idempotent).
 **M5 — Fleet vitals dashboard**: the `/dashboard` fleet summary, per-server
 vitals with 7-day sparklines, the `sync_server_metrics` job (5-minute cadence,
 90-day retention), and a project-health table.
-**M6 — Page scores** and later milestones are tracked in `MILESTONES.md`.
+**M6 — Page scores**: the signed `POST /api/webhooks/lighthouse/{projectId}` webhook, the reference CI client `scripts/lighthouse-reporter.mjs`, and a 30-day score chart on the project detail page. Later milestones are tracked in `MILESTONES.md`.

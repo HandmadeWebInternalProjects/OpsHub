@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M5 complete ✅ — M6 (Page scores) not started
+**Current:** M6 complete ✅ — M7 (Audit summaries) not started
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -159,18 +159,25 @@ sparkline. The 5-minute cadence is wired the same way as M2's accepted
 
 ---
 
-## M6 — Page scores `[ ]`
+## M6 — Page scores `[x]`
 
-- [ ] `POST /api/webhooks/lighthouse/{projectId}`: validate HMAC
+- [x] `POST /api/webhooks/lighthouse/{projectId}`: validate HMAC
       `X-OpsHub-Signature`, insert `page_scores` row (idempotent)
-- [ ] `scripts/lighthouse-reporter.mjs` reference client (reads `LHCI_*` env,
-      POSTs to OpsHub)
-- [ ] Project detail page: 30-day line chart of performance/accessibility/
-      best-practices/SEO (recharts)
-- [ ] Documented integration steps in README for client Astro CI pipelines
+      (2026-11-20, a6555ca + 9b5014f)
+- [x] `scripts/lighthouse-reporter.mjs` reference client (reads `LHCI_*` env,
+      POSTs to OpsHub) (2026-11-20, 28ab978)
+- [x] Project detail page: 30-day line chart of performance/accessibility/
+      best-practices/SEO (recharts) (2026-11-20, 4786a9d)
+- [x] Documented integration steps in README for client Astro CI pipelines
+      (2026-11-20, README)
 
 **Acceptance:** Running the reference script against a test project populates
-the chart; malformed or unsigned payloads are rejected with 401.
+the chart; malformed or unsigned payloads are rejected with 401. ✅ Verified
+2026-11-20: `pnpm test:e2e` (4 passed) runs the reference client against a test
+project (`scripts/lighthouse-reporter.mjs --lhr e2e/fixtures/lhr-test.json`) and
+asserts the 30-day chart + latest scores render on the project page; 5 unit
+tests cover the rejection paths (missing/wrong signature → `401`, malformed JSON
+→ `400`, unknown project → `404`, bad shape → `400`).
 
 **Depends on:** M1
 
@@ -215,6 +222,47 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M6 Page scores (built; acceptance verified)
+- **Added:** `page_scores.external_id` (unique) + migration
+  `0004_sturdy_nebula.sql` — the idempotency key. `POST
+  /api/webhooks/lighthouse/{projectId}`: HMAC-SHA256 over the raw body
+  (`X-OpsHub-Signature: sha256=<hex>`, `LIGHTHOUSE_WEBHOOK_SECRET`), Zod at the
+  boundary, insert deduped on `external_id` (`onConflictDoNothing`).
+  `scripts/lighthouse-reporter.mjs` reference client (reads `.lighthouseci/lhr-*.json`
+  + `OPSHUB_*`). `components/charts/score-trend-chart.tsx` (recharts) and a
+  "Page scores" card on the project detail page (last 30 days). README section
+  with the CI integration steps.
+- **Decisions (user, 2026-11-20):** (1) idempotency via a new `external_id`
+  column (PROJECT.md §4 edited — the M6 checklist required idempotency but the
+  table had no dedup key); (2) HMAC-SHA256 over the raw body, hex digest sent as
+  `sha256=<hex>`; (3) reporter uses `OPSHUB_URL` / `OPSHUB_PROJECT_ID` /
+  `LIGHTHOUSE_WEBHOOK_SECRET` for the connection and `LHCI_*` for report
+  metadata (`OPSHUB_EXTERNAL_ID` defaults to
+  `LHCI_BUILD_CONTEXT__EXTERNAL_BUILD_ID`).
+- **Idempotency:** the reporter's `external_id` is used when sent; otherwise the
+  route derives it from the HMAC of the raw body, so a repeated identical POST
+  cannot insert a second row.
+- **Dependency:** added `recharts@3.11.0` — pre-authorised by PROJECT.md §6 M6
+  ("use recharts") and §7 (`components/charts`). Sparklines stay dependency-free
+  inline SVG (M5).
+- **Commits:** `0cffbec` (PROJECT.md §4), `9b5014f` (schema + migration),
+  `a6555ca` (webhook + tests + vitest env), `4786a9d` (chart + project page),
+  `28ab978` (reporter), `4c1f29b` (e2e), and this docs commit.
+- **Verification (2026-11-20):** `tsc --noEmit`, `eslint`, `prettier`,
+  `pnpm test` (36, incl. 5 new webhook tests), `pnpm build` (project page
+  134 kB — recharts), `pnpm test:e2e` (4 passed) all green. The new e2e runs the
+  reference client against a fixture LHR and asserts the chart + latest scores
+  render; the rejection paths are unit-tested.
+- **Notes / follow-up:**
+  - The M6 checklist said the reporter "reads `LHCI_*` env"; LHCI writes scores
+    to `.lighthouseci/lhr-*.json` (not env), so the script reads those files and
+    uses `LHCI_*` only for the optional build id / report URL (documented in the
+    README).
+  - `jobs.pull_page_scores` remains unused — M6 ingests scores via the webhook,
+    not a polling job; the enum value stays for a possible future pull path.
+  - Local `.env` gained `LIGHTHOUSE_WEBHOOK_SECRET` (gitignored); the e2e reads
+    it from `.env` when the env var is absent.
 
 ### 2026-11-20 — M5 Fleet vitals dashboard (built; acceptance verified)
 - **Added:** `/dashboard` (fleet summary, a card per cached server with CPU/RAM/
