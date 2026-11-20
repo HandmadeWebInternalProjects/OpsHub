@@ -119,17 +119,17 @@ test("provisioning wizard creates a project through the worker", async ({
   await page.getByLabel("New client name").fill(clientName);
   await page.getByRole("button", { name: "Create client" }).click();
   await expect(page.getByText(clientName).first()).toBeVisible();
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
 
   // Step 2 — project details.
   await page.getByLabel("Project name").fill(projectName);
   await page.getByLabel("Domain").fill(domain);
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
 
   // Step 3 — infrastructure.
   await page.locator("#ploiServerId").click();
   await page.getByRole("option", { name: /mock-web-01/ }).click();
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
 
   // Step 4 — review and confirm.
   await expect(page.getByText(domain)).toBeVisible();
@@ -232,4 +232,52 @@ test("lighthouse reporter populates the page score chart", async ({ page }) => {
       '[role="img"][aria-label="Page score trend over the last 30 days"]',
     ),
   ).toBeVisible();
+});
+
+test("cms audit sync surfaces a login failure", async ({ page }) => {
+  const suffix = Date.now().toString(36);
+  const clientName = `Audit Client ${suffix}`;
+  const projectName = `Audit Project ${suffix}`;
+  const domain = `audit-${suffix}.example`;
+
+  // Log in.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Client + a plain project with a CMS URL (the audit source).
+  await page.goto("/clients/new");
+  await page.getByLabel("Name").fill(clientName);
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page).toHaveURL(/\/clients\/[0-9a-f-]{36}$/);
+  await page.getByRole("link", { name: "New project" }).click();
+  await page.getByRole("link", { name: "Create without provisioning" }).click();
+  await page.getByLabel("Name").fill(projectName);
+  await page.getByLabel("Domain").fill(domain);
+  await page.getByLabel("CMS URL").fill("https://cms.example.com");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
+  const projectId = page.url().split("/").pop() as string;
+
+  // Configure the project's audit token in Settings.
+  await page.goto("/settings");
+  const row = page.locator(`[data-project-id="${projectId}"]`);
+  await row.getByLabel(/audit token/).fill("audit-token-e2e");
+  await row.getByRole("button", { name: "Save" }).click();
+  await expect(row.getByText("Token saved.")).toBeVisible();
+
+  // Queue the pull; the worker (mock CMS) writes the synthetic events.
+  await page.getByRole("button", { name: "Sync audit logs now" }).click();
+
+  // The worker writes asynchronously; reload until the failure appears.
+  await page.goto(`/projects/${projectId}`);
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByText("Login failed")).toBeVisible({
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 60_000, intervals: [2_000, 5_000] });
+  await expect(page.getByText("Failed admin login")).toBeVisible();
 });
