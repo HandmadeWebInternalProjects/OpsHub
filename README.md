@@ -102,6 +102,34 @@ To watch the full flow locally with no credentials, set `USE_MOCKS=true` and run
 the worker alongside the app; the mock adapter creates a site and reports the
 deployment as successful.
 
+## Deploy status & webhook (M4)
+
+A project's detail page shows a **deploy timeline** (the last 20 events) and a
+**Redeploy** button. Redeploy enqueues a `trigger_deploy` job; the worker calls
+`POST /servers/{server}/sites/{id}/deploy`, polls the deployment to a terminal
+state, and records the outcome — updating `project.status`
+(`deploying` → `live`/`failed`) and appending a `deploy_events` row.
+
+### Ploi has no signed deploy webhook
+
+Ploi does **not** sign its notifications (no HMAC, no shared secret header), so
+the endpoint is authenticated with a secret you embed in the callback URL.
+Configure it per site in the Ploi panel: **site → Notifications**, and point the
+deployment channels at OpsHub:
+
+```
+Deployment started   →  POST {NEXTAUTH_URL}/api/webhooks/ploi/deploy-complete?token={PLOI_WEBHOOK_SECRET}&event=started
+Deployment completed →  POST {NEXTAUTH_URL}/api/webhooks/ploi/deploy-complete?token={PLOI_WEBHOOK_SECRET}
+```
+
+Set `PLOI_WEBHOOK_SECRET` (a long random string) in `.env`. The endpoint rejects
+a missing/incorrect token with `401` (and returns `503` if the secret is unset),
+so keep the URL private. The callback payload is only a trigger: OpsHub re-reads
+`GET /servers/{server}/sites/{site}/deployments` for the authoritative status, so
+the recorded event is correct even though the notification carries no status
+field. Writes are deduplicated on the Ploi deployment id, so a repeated
+notification cannot double-count.
+
 ## Status
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
@@ -114,4 +142,9 @@ worker, a Servers page with **Sync now**, and project → Ploi server/site
 linking.
 **M3 — Provisioning wizard**: the `/projects/new` wizard, the `provision_site`
 job (create site → wait → deploy), the `GET /api/jobs/{id}` polling endpoint,
-and the job-progress UI. Later milestones are tracked in `MILESTONES.md`.
+and the job-progress UI.
+**M4 — Deployment status & webhooks**: the `deploy_events` timeline, the
+`trigger_deploy` job + **Redeploy** button, and the
+`POST /api/webhooks/ploi/deploy-complete` callback (token-authenticated,
+reconciled against the Ploi API, idempotent). Later milestones are tracked in
+`MILESTONES.md`.
