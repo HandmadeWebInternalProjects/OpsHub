@@ -22,6 +22,7 @@ export default defineConfig({
       ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       USE_MOCKS: "true",
       PLOI_WEBHOOK_SECRET: "test-webhook-secret",
+      LIGHTHOUSE_WEBHOOK_SECRET: "test-lighthouse-secret",
       LOG_LEVEL: "silent",
     },
   },
