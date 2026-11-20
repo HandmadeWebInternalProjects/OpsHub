@@ -261,14 +261,14 @@ test("cms audit sync surfaces a login failure", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
   const projectId = page.url().split("/").pop() as string;
 
-  // Configure the project's audit token in Settings.
-  await page.goto("/settings");
-  const row = page.locator(`[data-project-id="${projectId}"]`);
-  await row.getByLabel(/audit token/).fill("audit-token-e2e");
-  await row.getByRole("button", { name: "Save" }).click();
-  await expect(row.getByText("Token saved.")).toBeVisible();
+  // Configure the project's audit token on the project's Integrations tab.
+  await page.goto(`/projects/${projectId}/integrations`);
+  await page.getByLabel(/audit token/).fill("audit-token-e2e");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Token saved.")).toBeVisible();
 
-  // Queue the pull; the worker (mock CMS) writes the synthetic events.
+  // Queue the pull from Settings; the worker (mock CMS) writes the events.
+  await page.goto("/settings");
   await page.getByRole("button", { name: "Sync audit logs now" }).click();
 
   // The worker writes asynchronously; reload until the failure appears.
@@ -309,14 +309,14 @@ test("an alert rule fires and can be acknowledged", async ({ page }) => {
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
   const projectId = page.url().split("/").pop() as string;
 
-  // Configure the audit token so the worker can pull events.
-  await page.goto("/settings");
-  const tokenRow = page.locator(`[data-project-id="${projectId}"]`);
-  await tokenRow.getByLabel(/audit token/).fill("audit-token-e2e");
-  await tokenRow.getByRole("button", { name: "Save" }).click();
-  await expect(tokenRow.getByText("Token saved.")).toBeVisible();
+  // Configure the audit token on the project's Integrations tab.
+  await page.goto(`/projects/${projectId}/integrations`);
+  await page.getByLabel(/audit token/).fill("audit-token-e2e");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Token saved.")).toBeVisible();
 
   // Configure an alert rule: repeated failed logins for this project.
+  await page.goto("/alerts/rules");
   await page.locator("#ruleType").click();
   await page.getByRole("option", { name: "Failed logins (1h)" }).click();
   await page.locator("#ruleProject").click();
@@ -325,8 +325,9 @@ test("an alert rule fires and can be acknowledged", async ({ page }) => {
   await page.getByRole("button", { name: "Create rule" }).click();
   await expect(page.getByText("Rule created.")).toBeVisible();
 
-  // Queue the audit pull; the worker (mock CMS) writes a login failure and the
-  // rule fires.
+  // Queue the audit pull from Settings; the worker (mock CMS) writes a login
+  // failure and the rule fires.
+  await page.goto("/settings");
   await page.getByRole("button", { name: "Sync audit logs now" }).click();
 
   const alert = page

@@ -36,18 +36,8 @@ export default async function AlertsPage() {
     .orderBy(asc(alerts.status), desc(alerts.triggeredAt))
     .limit(100);
 
-  const openCount = rows.filter((row) => row.status === "open").length;
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">Alerts</h1>
-        <p className="text-sm text-muted-foreground">
-          Fired alert rules. {openCount} open. Configure rules on the Settings
-          page.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-4">
       {rows.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">

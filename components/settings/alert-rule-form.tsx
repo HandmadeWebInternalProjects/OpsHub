@@ -29,16 +29,18 @@ const channelItems = [
   { value: "email", label: "Email (Resend)" },
 ];
 
-/** Create an alert rule (M8). */
+/** Create an alert rule (M8). Pass `fixedProjectId` to scope it to one project. */
 export function AlertRuleForm({
   projects,
+  fixedProjectId,
 }: {
   projects: { id: string; name: string }[];
+  fixedProjectId?: string;
 }) {
   const router = useRouter();
   const [ruleType, setRuleType] =
     useState<(typeof ALERT_RULE_TYPES)[number]>("server_disk_pct");
-  const [projectId, setProjectId] = useState(FLEET_WIDE);
+  const [projectId, setProjectId] = useState(fixedProjectId ?? FLEET_WIDE);
   const [threshold, setThreshold] = useState("80");
   const [channel, setChannel] = useState("webhook");
   const [destination, setDestination] = useState("");
@@ -64,7 +66,8 @@ export function AlertRuleForm({
     startTransition(async () => {
       const result = await createAlertRule({
         ruleType,
-        projectId: projectId === FLEET_WIDE ? "" : projectId,
+        projectId:
+          fixedProjectId ?? (projectId === FLEET_WIDE ? "" : projectId),
         threshold: needsThreshold ? threshold : "",
         channel,
         destination,
@@ -105,25 +108,27 @@ export function AlertRuleForm({
         </Select>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="ruleProject">Project</Label>
-        <Select
-          items={projectItems}
-          value={projectId}
-          onValueChange={(value) => setProjectId(String(value ?? FLEET_WIDE))}
-        >
-          <SelectTrigger id="ruleProject" className="w-full">
-            <SelectValue placeholder="Select a project" />
-          </SelectTrigger>
-          <SelectContent>
-            {projectItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {fixedProjectId ? null : (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="ruleProject">Project</Label>
+          <Select
+            items={projectItems}
+            value={projectId}
+            onValueChange={(value) => setProjectId(String(value ?? FLEET_WIDE))}
+          >
+            <SelectTrigger id="ruleProject" className="w-full">
+              <SelectValue placeholder="Select a project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projectItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {needsThreshold ? (
         <div className="flex flex-col gap-2">

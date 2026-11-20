@@ -1,15 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, gte } from "drizzle-orm";
-import { z } from "zod";
 
-import { PloiLinkForm } from "@/components/projects/ploi-link-form";
-import { ArchiveProjectButton } from "@/components/projects/archive-project-button";
 import { AuditActivity } from "@/components/projects/audit-activity";
 import { DeployTimeline } from "@/components/projects/deploy-timeline";
-import { RedeployButton } from "@/components/projects/redeploy-button";
 import { ProjectForm } from "@/components/projects/project-form";
-import { StatusBadge } from "@/components/status-badge";
 import {
   ScoreTrendChart,
   type ScorePoint,
@@ -28,7 +23,6 @@ import {
   auditSummaries,
   pageScores,
   projects,
-  servers,
 } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -60,16 +54,13 @@ function ExternalLink({ label, href }: ExternalLinkProps) {
   );
 }
 
-export default async function ProjectDetailPage({
+/** Project Overview tab: identity, links, scores, audit activity and deploys. */
+export default async function ProjectOverviewPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
-  if (!z.uuid().safeParse(id).success) {
-    notFound();
-  }
 
   const [row] = await db
     .select({ project: projects, clientName: clients.name })
@@ -88,15 +79,6 @@ export default async function ProjectDetailPage({
     .select({ id: clients.id, name: clients.name })
     .from(clients)
     .orderBy(asc(clients.name));
-
-  const ploiServers = await db
-    .select({
-      ploiServerId: servers.ploiServerId,
-      name: servers.name,
-      ipAddress: servers.ipAddress,
-    })
-    .from(servers)
-    .orderBy(asc(servers.name));
 
   const deployTimeline = await db
     .select()
@@ -132,33 +114,6 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <Link
-          href="/projects"
-          className="text-sm text-muted-foreground hover:underline"
-        >
-          ← Projects
-        </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold">{project.name}</h1>
-            <StatusBadge status={project.status} />
-          </div>
-          <div className="flex items-start gap-2">
-            <RedeployButton
-              projectId={project.id}
-              disabled={
-                project.status === "archived" || project.ploiSiteId == null
-              }
-            />
-            <ArchiveProjectButton
-              projectId={project.id}
-              disabled={project.status === "archived"}
-            />
-          </div>
-        </div>
-      </div>
-
       <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>Overview</CardTitle>
@@ -201,20 +156,6 @@ export default async function ProjectDetailPage({
               astroRepoUrl: project.astroRepoUrl ?? "",
               cmsRepoUrl: project.cmsRepoUrl ?? "",
             }}
-          />
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Ploi infrastructure</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PloiLinkForm
-            projectId={project.id}
-            servers={ploiServers}
-            defaultServerId={project.ploiServerId}
-            defaultSiteId={project.ploiSiteId}
           />
         </CardContent>
       </Card>

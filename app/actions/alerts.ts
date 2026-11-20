@@ -18,7 +18,7 @@ async function currentUser(): Promise<{ email: string } | null> {
 
 function revalidateAlerts(): void {
   revalidatePath("/alerts");
-  revalidatePath("/settings");
+  revalidatePath("/alerts/rules");
 }
 
 /** Create an alert rule (M8). */

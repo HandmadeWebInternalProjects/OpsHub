@@ -1,9 +1,6 @@
-import { asc, eq, ne } from "drizzle-orm";
+import Link from "next/link";
 
-import { AlertRuleForm } from "@/components/settings/alert-rule-form";
-import { AlertRuleList } from "@/components/settings/alert-rule-list";
 import { AuditSyncButton } from "@/components/settings/audit-sync-button";
-import { CmsTokenForm } from "@/components/settings/cms-token-form";
 import {
   Card,
   CardContent,
@@ -11,117 +8,93 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { db } from "@/lib/db";
-import { alertRules, projects } from "@/lib/db/schema";
-import {
-  cmsTokenKey,
-  listIntegrationConfigKeys,
-} from "@/lib/integration-config";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
-  const [projectRows, configuredKeys, ruleRows] = await Promise.all([
-    db
-      .select({
-        id: projects.id,
-        name: projects.name,
-        cmsType: projects.cmsType,
-        cmsUrl: projects.cmsUrl,
-      })
-      .from(projects)
-      .where(ne(projects.status, "archived"))
-      .orderBy(asc(projects.name)),
-    listIntegrationConfigKeys(),
-    db
-      .select({
-        id: alertRules.id,
-        ruleType: alertRules.ruleType,
-        projectName: projects.name,
-        threshold: alertRules.threshold,
-        channel: alertRules.channel,
-        destination: alertRules.destination,
-        enabled: alertRules.enabled,
-      })
-      .from(alertRules)
-      .leftJoin(projects, eq(alertRules.projectId, projects.id))
-      .orderBy(asc(alertRules.createdAt)),
-  ]);
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b py-2 last:border-b-0">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium">{value}</span>
+    </div>
+  );
+}
 
+function configured(value: string | undefined): string {
+  return value ? "Configured" : "Not set";
+}
+
+/** Platform-level settings: integration status (from env) and global actions. */
+export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Integration configuration. Secrets are encrypted at rest and never
-          shown again once saved.
+          Platform configuration and integration status. Per-project settings
+          live on each project (Integrations and Alert rules tabs).
         </p>
       </div>
 
-      <Card className="max-w-2xl">
+      <Card className="max-w-xl">
         <CardHeader>
-          <CardTitle>Content-backend audit sync</CardTitle>
+          <CardTitle>Integration status</CardTitle>
           <CardDescription>
-            OpsHub pulls recent audit events from each project’s content backend
-            every 15 minutes. Set the project’s CMS URL (on the project page)
-            and its audit token here. The token is sent as
-            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">
-              Authorization: Bearer &lt;token&gt;
-            </code>
-            to the audit endpoint.
+            Values come from the environment. Secrets are never displayed.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col">
+          <StatusRow
+            label="Data source"
+            value={env.USE_MOCKS ? "Mock adapters (USE_MOCKS)" : "Live"}
+          />
+          <StatusRow
+            label="Ploi API token"
+            value={configured(env.PLOI_API_TOKEN)}
+          />
+          <StatusRow label="Ploi API base" value={env.PLOI_API_BASE} />
+          <StatusRow
+            label="Ploi webhook secret"
+            value={configured(env.PLOI_WEBHOOK_SECRET)}
+          />
+          <StatusRow
+            label="Lighthouse webhook secret"
+            value={configured(env.LIGHTHOUSE_WEBHOOK_SECRET)}
+          />
+          <StatusRow
+            label="Default alert webhook"
+            value={configured(env.SLACK_WEBHOOK_URL)}
+          />
+          <StatusRow
+            label="Resend API key"
+            value={configured(env.RESEND_API_KEY)}
+          />
+          <StatusRow label="Alert email from" value={env.ALERT_EMAIL_FROM} />
+          <StatusRow
+            label="Worker poll interval"
+            value={`${env.WORKER_POLL_INTERVAL_MS} ms`}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Global actions</CardTitle>
+          <CardDescription>
+            Fleet-wide operations. The worker performs the actual work, so run
+            it alongside the app.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <AuditSyncButton />
-
-          {projectRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No projects yet. Create one to configure its audit token.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {projectRows.map((project) => (
-                <div
-                  key={project.id}
-                  data-project-id={project.id}
-                  className="flex flex-col gap-1 border-b pb-4 last:border-b-0 last:pb-0"
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-sm font-medium">{project.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {project.cmsUrl ?? "No CMS URL set"}
-                    </span>
-                  </div>
-                  <CmsTokenForm
-                    projectId={project.id}
-                    cmsType={project.cmsType}
-                    hasToken={configuredKeys.has(cmsTokenKey(project.id))}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Alert rules</CardTitle>
-          <CardDescription>
-            Alert rules fire when a metrics, page-score, deploy or audit event
-            breaches a threshold. Webhook deliveries post a JSON text payload to
-            a Slack- or Google Chat-compatible incoming webhook (the rule&apos;s
-            destination, or SLACK_WEBHOOK_URL).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-6">
-          <AlertRuleForm
-            projects={projectRows.map((row) => ({
-              id: row.id,
-              name: row.name,
-            }))}
-          />
-          <AlertRuleList rules={ruleRows} />
+          <p className="text-sm text-muted-foreground">
+            Alert rules, including fleet-wide ones, are managed under{" "}
+            <Link href="/alerts/rules" className="text-primary hover:underline">
+              Alerts → Rules
+            </Link>
+            .
+          </p>
         </CardContent>
       </Card>
     </div>
