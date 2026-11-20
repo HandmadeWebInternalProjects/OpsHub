@@ -134,6 +134,7 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
   server_id: uuid FK -> servers
   captured_at: timestamp
   cpu_pct: numeric nullable
+  ram_pct: numeric nullable   // Ploi reports RAM as a percentage, not MB
   ram_used_mb: integer nullable
   disk_used_pct: numeric nullable
   load_avg_1m: numeric nullable

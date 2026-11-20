@@ -229,9 +229,9 @@ entries at the top.
 - **Spec change (user-approved 2026-11-20):** added `metrics_snapshots.ram_pct`
   (migration `0003_clammy_alex_power.sql`). Ploi's monitored endpoint reports RAM
   as a **percentage** (`"36.32"`), not MB, so §4's `ram_used_mb integer` cannot
-  hold it; `ram_used_mb` is kept for real MB data. **A one-line PROJECT.md §4
-  wording update is proposed and still owed — not applied pending explicit
-  approval.**
+  hold it; `ram_used_mb` is kept for real MB data. Approved by the user
+  2026-11-20 and **applied to PROJECT.md §4** (recorded in a follow-up docs
+  commit).
 - **Doc verification (2026-11-20):** confirmed `statistics[]` shape/units against
   developers.ploi.io (servers/monitored): `cpu`/`ram`/`disk` are percentage
   strings, `load_average` a load number, `date` UTC.
@@ -260,7 +260,7 @@ entries at the top.
     mechanism as M2's accepted `sync_servers`.
   - No unit test for the `sync_server_metrics` handler (DB test harness still
     missing — same gap as `sync_servers` / `provision_site`).
-  - PROJECT.md §4 `ram_pct` wording pending approval.
+  - PROJECT.md §4 `ram_pct` line **applied** (see the Spec change note above).
 
 ### 2026-11-20 — M4 Deployment status & webhooks (built; acceptance verified)
 - **Added:** `deploy_events` table + `deploy_event_type` enum (migration
