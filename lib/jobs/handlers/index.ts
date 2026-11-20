@@ -1,5 +1,6 @@
 import type { JobHandler, JobType } from "../types";
 import { provisionSiteHandler } from "./provision-site";
+import { pullAuditLogsHandler } from "./pull-audit-logs";
 import { syncServerMetricsHandler } from "./sync-server-metrics";
 import { syncServersHandler } from "./sync-servers";
 import { triggerDeployHandler } from "./trigger-deploy";
@@ -13,4 +14,5 @@ export const jobHandlers: Partial<Record<JobType, JobHandler>> = {
   sync_server_metrics: syncServerMetricsHandler,
   provision_site: provisionSiteHandler,
   trigger_deploy: triggerDeployHandler,
+  pull_audit_logs: pullAuditLogsHandler,
 };

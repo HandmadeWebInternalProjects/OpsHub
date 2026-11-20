@@ -14,6 +14,7 @@ import type { JobType } from "./types";
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 30_000;
 const RECURRING_SYNC_INTERVAL_MS = 5 * 60_000;
+const AUDIT_SYNC_INTERVAL_MS = 15 * 60_000;
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -162,10 +163,12 @@ export async function enqueueIfStale(
   }
 }
 
-/** Recurring jobs this worker keeps alive (M2/M5: servers + metrics every 5 min). */
+/** Recurring jobs this worker keeps alive (M2/M5: servers + metrics every 5
+ * min; M7: audit logs every 15 min). */
 export async function ensureRecurringJobs(): Promise<void> {
   await enqueueIfStale("sync_servers", RECURRING_SYNC_INTERVAL_MS);
   await enqueueIfStale("sync_server_metrics", RECURRING_SYNC_INTERVAL_MS);
+  await enqueueIfStale("pull_audit_logs", AUDIT_SYNC_INTERVAL_MS);
 }
 
 /**
