@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M4 complete ✅ — M5 (Fleet vitals dashboard) not started
+**Current:** M5 complete ✅ — M6 (Page scores) not started
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -133,17 +133,27 @@ client repo + a manual Ploi-panel step) — see Session Log.
 
 ---
 
-## M5 — Fleet vitals dashboard `[ ]`
+## M5 — Fleet vitals dashboard `[x]`
 
-- [ ] `/dashboard` fleet summary: N servers, N live projects, N failing
-- [ ] Server cards: CPU, RAM, disk, load with 7-day sparkline
-- [ ] `sync_server_metrics` job: every 5 min, `GET /servers/monitored`,
+- [x] `/dashboard` fleet summary: N servers, N live projects, N failing
+      (2026-11-20, bf1ab9e)
+- [x] Server cards: CPU, RAM, disk, load with 7-day sparkline
+      (2026-11-20, bf1ab9e) — inline SVG (`components/charts/sparkline.tsx`);
+      RAM is a percentage (see Session Log: `metrics_snapshots.ram_pct`)
+- [x] `sync_server_metrics` job: every 5 min, `GET /servers/monitored`,
       write one `metrics_snapshots` row per server per run
-- [ ] Metrics retention: prune rows older than 90 days
-- [ ] Project health table: status, last deploy, latest page score
+      (2026-11-20, bf1ab9e)
+- [x] Metrics retention: prune rows older than 90 days (2026-11-20, bf1ab9e)
+- [x] Project health table: status, last deploy, latest page score
+      (2026-11-20, bf1ab9e)
 
 **Acceptance:** Dashboard shows live-ish stats for all servers, refreshed on
-a 5-minute cadence; the sparklines trend correctly.
+a 5-minute cadence; the sparklines trend correctly. ✅ Verified 2026-11-20
+under the **mock adapter**: the worker's `sync_server_metrics` job wrote
+`metrics_snapshots` rows (checked in the DB, `cpu_pct`/`ram_pct` populated) and
+`pnpm test:e2e` (3 passed) renders the fleet summary, a server card and a live
+sparkline. The 5-minute cadence is wired the same way as M2's accepted
+`sync_servers` recurrence; a real 5-minute window was not observed over time.
 
 **Depends on:** M2, M4
 
@@ -205,6 +215,52 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M5 Fleet vitals dashboard (built; acceptance verified)
+- **Added:** `/dashboard` (fleet summary, a card per cached server with CPU/RAM/
+  disk/load + 7-day sparklines, project-health table). `sync_server_metrics`
+  handler: latest datapoint per server → one `metrics_snapshots` row per run
+  (idempotent on `(server_id, captured_at)`), prune >90 days. Worker enqueues it
+  every 5 min alongside `sync_servers`. `lib/servers.ts` (shared
+  monitored-server upsert, now used by `sync_servers` too), `lib/metrics.ts`
+  (statistic parser + retention constants),
+  `components/charts/sparkline.tsx` (dependency-free inline SVG),
+  `components/dashboard/server-metrics-card.tsx`.
+- **Spec change (user-approved 2026-11-20):** added `metrics_snapshots.ram_pct`
+  (migration `0003_clammy_alex_power.sql`). Ploi's monitored endpoint reports RAM
+  as a **percentage** (`"36.32"`), not MB, so §4's `ram_used_mb integer` cannot
+  hold it; `ram_used_mb` is kept for real MB data. **A one-line PROJECT.md §4
+  wording update is proposed and still owed — not applied pending explicit
+  approval.**
+- **Doc verification (2026-11-20):** confirmed `statistics[]` shape/units against
+  developers.ploi.io (servers/monitored): `cpu`/`ram`/`disk` are percentage
+  strings, `load_average` a load number, `date` UTC.
+- **Mock:** `listMonitoredServers` now emits recent (per-minute) datapoints that
+  advance each call, so the metrics job accumulates a series and sparklines trend
+  locally. Mock deploy ids gained a per-process suffix to fix a real collision:
+  a leftover `deploy_events.external_id` (e.g. `mock-deploy-1`) from an earlier
+  session silently swallowed a fresh redeploy event via `onConflictDoNothing`
+  (the M4 log's known gap) and broke the M4 e2e tail.
+- **Decisions / deviations:**
+  - No charting dependency in M5 — sparklines are inline SVG; `recharts` is a
+    §6/§7 dependency for M6 and will be added there.
+  - The metrics job upserts the server cache itself, so it works even if it runs
+    before `sync_servers` (both are enqueued on worker start).
+  - `cpu_pct`/`ram_pct`/`disk_used_pct`/`load_avg_1m` store Ploi's numbers as
+    given; `ram_used_mb` is unused for now.
+- **Commits:** `bf1ab9e` (schema + migration + jobs + dashboard + tests + README).
+- **Verification (2026-11-20, mock adapter):** `tsc`, `eslint`, `prettier`,
+  `pnpm test` (31), `pnpm build`, `pnpm test:e2e` (3 passed — incl. a new
+  dashboard test asserting the fleet summary, a server card and a rendered
+  sparkline). Checked the local DB directly: `sync_server_metrics` wrote rows
+  with `cpu_pct`/`ram_pct` populated.
+- **Outstanding / follow-up:**
+  - Live Ploi cadence not observed over real time (the account has one monitored
+    server; monitoring may not be installed). The 5-min schedule is the same
+    mechanism as M2's accepted `sync_servers`.
+  - No unit test for the `sync_server_metrics` handler (DB test harness still
+    missing — same gap as `sync_servers` / `provision_site`).
+  - PROJECT.md §4 `ram_pct` wording pending approval.
 
 ### 2026-11-20 — M4 Deployment status & webhooks (built; acceptance verified)
 - **Added:** `deploy_events` table + `deploy_event_type` enum (migration
