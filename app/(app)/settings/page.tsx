@@ -1,5 +1,7 @@
-import { asc, ne } from "drizzle-orm";
+import { asc, eq, ne } from "drizzle-orm";
 
+import { AlertRuleForm } from "@/components/settings/alert-rule-form";
+import { AlertRuleList } from "@/components/settings/alert-rule-list";
 import { AuditSyncButton } from "@/components/settings/audit-sync-button";
 import { CmsTokenForm } from "@/components/settings/cms-token-form";
 import {
@@ -10,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { db } from "@/lib/db";
-import { projects } from "@/lib/db/schema";
+import { alertRules, projects } from "@/lib/db/schema";
 import {
   cmsTokenKey,
   listIntegrationConfigKeys,
@@ -19,7 +21,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [projectRows, configuredKeys] = await Promise.all([
+  const [projectRows, configuredKeys, ruleRows] = await Promise.all([
     db
       .select({
         id: projects.id,
@@ -31,6 +33,19 @@ export default async function SettingsPage() {
       .where(ne(projects.status, "archived"))
       .orderBy(asc(projects.name)),
     listIntegrationConfigKeys(),
+    db
+      .select({
+        id: alertRules.id,
+        ruleType: alertRules.ruleType,
+        projectName: projects.name,
+        threshold: alertRules.threshold,
+        channel: alertRules.channel,
+        destination: alertRules.destination,
+        enabled: alertRules.enabled,
+      })
+      .from(alertRules)
+      .leftJoin(projects, eq(alertRules.projectId, projects.id))
+      .orderBy(asc(alertRules.createdAt)),
   ]);
 
   return (
@@ -86,6 +101,27 @@ export default async function SettingsPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Alert rules</CardTitle>
+          <CardDescription>
+            Alert rules fire when a metrics, page-score, deploy or audit event
+            breaches a threshold. Webhook deliveries post a JSON text payload to
+            a Slack- or Google Chat-compatible incoming webhook (the rule&apos;s
+            destination, or SLACK_WEBHOOK_URL).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          <AlertRuleForm
+            projects={projectRows.map((row) => ({
+              id: row.id,
+              name: row.name,
+            }))}
+          />
+          <AlertRuleList rules={ruleRows} />
         </CardContent>
       </Card>
     </div>

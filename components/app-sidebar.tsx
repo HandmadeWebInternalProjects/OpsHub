@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   FolderKanban,
   LayoutDashboard,
   Server,
@@ -18,10 +19,11 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/servers", label: "Servers", icon: Server },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ alertCount = 0 }: { alertCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -45,7 +47,15 @@ export function AppSidebar() {
               )}
             >
               <Icon className="size-4" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {href === "/alerts" && alertCount > 0 ? (
+                <span
+                  aria-label={`${alertCount} open alerts`}
+                  className="rounded-full bg-destructive px-1.5 text-xs font-semibold text-white"
+                >
+                  {alertCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}

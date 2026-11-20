@@ -80,6 +80,60 @@ export const cmsTokenSchema = z.object({
 
 export type CmsTokenInput = z.infer<typeof cmsTokenSchema>;
 
+/** Rule types (M8) — must match the `alert_rule_type` enum in §4. */
+export const ALERT_RULE_TYPES = [
+  "server_disk_pct",
+  "page_score_performance",
+  "deploy_failed",
+  "audit_login_failed_count",
+] as const;
+
+const optionalThreshold = z
+  .union([z.literal(""), z.coerce.number().finite()])
+  .optional();
+
+/** Create/update an alert rule (M8). */
+export const alertRuleFormSchema = z
+  .object({
+    ruleType: z.enum(ALERT_RULE_TYPES),
+    // Empty string = fleet-wide (no project).
+    projectId: z
+      .union([z.literal(""), z.uuid("Select a valid project")])
+      .optional(),
+    threshold: optionalThreshold,
+    channel: z.enum(["webhook", "email"]).default("webhook"),
+    destination: z
+      .string()
+      .trim()
+      .max(500, "Destination is too long")
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    // deploy_failed has no numeric bound; the others require one.
+    if (
+      value.ruleType !== "deploy_failed" &&
+      (value.threshold === undefined || value.threshold === "")
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["threshold"],
+        message: "A threshold is required for this rule type.",
+      });
+    }
+    if (value.channel === "email") {
+      const to = value.destination?.trim() ?? "";
+      if (to.length > 0 && !z.email().safeParse(to).success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destination"],
+          message: "Enter a valid email address.",
+        });
+      }
+    }
+  });
+
+export type AlertRuleFormInput = z.infer<typeof alertRuleFormSchema>;
+
 /**
  * The provisioning wizard (M3): everything needed to queue a `provision_site`
  * job. Builds on the project fields and adds the infrastructure choices.
