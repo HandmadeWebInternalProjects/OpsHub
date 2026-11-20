@@ -242,6 +242,36 @@ not exercised — see Session Log.
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
 
+### 2026-11-20 — Post-M8: live-stats fix + settings restructure
+- **Fix (`1959ad7`):** the live `GET /servers/monitored` returns **named time
+  series** (`[{ name: "CPU", data: { "10:25": 4.1, … } }]`), not the flat
+  per-datapoint shape the docs (and mock) showed, so real servers
+  (`brutus-vps`) rendered blank. `lib/metrics.ts` now normalises **both** shapes
+  (`parseMetrics`), the mock mirrors the live series shape, and the metrics job +
+  Servers page use it. Verified against brutus's stored `raw_json` (no API
+  call): cpu `0.70%` / ram `16.14%` / disk `54.00%`; the endpoint exposes no Load
+  series, so live Load stays blank. Dashboard needs one live
+  `sync_server_metrics` run to backfill brutus's sparklines.
+- **Refactor (`96e80e2`, user-directed):** Settings had grown into a long
+  per-project list. Now:
+  - `/settings` = **platform-level only**: read-only integration status (env) +
+    global "Sync audit logs now".
+  - **Alerts tabs**: `/alerts` (fired) and `/alerts/rules` (create + manage,
+    scope filter); sidebar badge unchanged.
+  - **Project tabs**: `/projects/[id]` (Overview),
+    `/projects/[id]/integrations` (Ploi link + CMS audit token),
+    `/projects/[id]/alerts` (project-scoped rules).
+  - Decisions (user, 2026-11-20): dedicated Rules page; tabs on the project;
+    read-only platform Settings.
+  - `pnpm test` 56, `tsc`, `eslint`, `prettier`, `pnpm build`, `pnpm test:e2e`
+    (6 passed) all green.
+- **Proposed, not yet approved:** PROJECT.md **M9 "Templated provisioning"**.
+  The Ploi repository endpoint (
+  `POST /servers/{server}/sites/{site}/repository`, body
+  `{provider, branch, name, source_provider_id?}`) is **verified to exist** on
+  developers.ploi.io, closing M3's "no repository attach" gap. Awaiting
+  sign-off before any PROJECT.md edit or code.
+
 ### 2026-11-20 — M8 Alerting (built; acceptance verified under mocks)
 - **Added:** §4 tables `alert_rules` + `alerts` (migration
   `0005_glorious_clea.sql`; the `alerts.dedupe_key` uniqueness is a **partial**
