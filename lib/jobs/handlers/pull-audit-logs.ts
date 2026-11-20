@@ -1,5 +1,6 @@
 import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
 
+import { evaluateAuditLoginFailed } from "@/lib/alerts";
 import { getCmsProvider } from "@/lib/cms";
 import { NullCmsProvider } from "@/lib/cms/null-provider";
 import { db } from "@/lib/db";
@@ -29,6 +30,7 @@ export const pullAuditLogsHandler: JobHandler = async ({
   let written = 0;
   let skipped = 0;
   let failed = 0;
+  let alertsFired = 0;
 
   for (const project of candidates) {
     try {
@@ -75,6 +77,19 @@ export const pullAuditLogsHandler: JobHandler = async ({
         if (row) written += 1;
         else skipped += 1;
       }
+
+      // M8: fire `audit_login_failed_count` rules after ingesting the events.
+      try {
+        alertsFired += await evaluateAuditLoginFailed({
+          projectId: project.id,
+          projectName: project.name,
+        });
+      } catch (error) {
+        logger.warn(
+          { projectId: project.id, error: redact(error) },
+          "pull_audit_logs: alert evaluation failed",
+        );
+      }
     } catch (error) {
       failed += 1;
       logger.warn(
@@ -90,12 +105,12 @@ export const pullAuditLogsHandler: JobHandler = async ({
   }
 
   logger.info(
-    { written, skipped, failed, candidates: candidates.length },
+    { written, skipped, failed, candidates: candidates.length, alertsFired },
     "pull_audit_logs finished",
   );
 
   return {
     summary: `Wrote ${written} audit event(s) from ${candidates.length - failed} project(s); ${skipped} skipped.`,
-    data: { written, skipped, failed },
+    data: { written, skipped, failed, alertsFired },
   };
 };

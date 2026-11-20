@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { evaluatePageScore } from "@/lib/alerts";
 import { db } from "@/lib/db";
 import { pageScores, projects } from "@/lib/db/schema";
 import { env } from "@/lib/env";
@@ -107,7 +108,7 @@ export async function POST(
   }
 
   const [project] = await db
-    .select({ id: projects.id })
+    .select({ id: projects.id, name: projects.name })
     .from(projects)
     .where(eq(projects.id, projectId))
     .limit(1);
@@ -139,6 +140,20 @@ export async function POST(
         reportUrl: report.report_url ?? null,
       })
       .onConflictDoNothing({ target: pageScores.externalId });
+
+    // M8: fire `page_score_performance` rules for the freshly recorded score.
+    try {
+      await evaluatePageScore({
+        projectId: project.id,
+        projectName: project.name,
+        performance: report.performance,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: redact(error), projectId: project.id },
+        "page score alert evaluation failed",
+      );
+    }
 
     try {
       revalidatePath(`/projects/${project.id}`);

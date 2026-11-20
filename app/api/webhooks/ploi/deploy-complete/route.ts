@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { evaluateDeployFailed } from "@/lib/alerts";
 import { db } from "@/lib/db";
 import { projects } from "@/lib/db/schema";
 import type { Project } from "@/lib/db/schema";
@@ -143,7 +144,22 @@ export async function POST(request: Request): Promise<NextResponse> {
           : [];
 
       if (latest) {
-        await recordDeployment(project.id, latest);
+        const mapped = await recordDeployment(project.id, latest);
+        if (mapped.event === "deploy_failed") {
+          try {
+            await evaluateDeployFailed({
+              projectId: project.id,
+              projectName: project.name,
+              deploymentId: latest.id,
+              message: latest.commit_message ?? null,
+            });
+          } catch (error) {
+            logger.warn(
+              { projectId: project.id, error: redact(error) },
+              "deploy_failed alert evaluation failed",
+            );
+          }
+        }
       } else {
         // Ploi has not listed the deployment yet (the API omits runs that are
         // still finishing). Record the notification; the log text is stable for

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { evaluateDeployFailed } from "@/lib/alerts";
 import { pollDeploymentStatus, recordDeployment } from "@/lib/deploy";
 import { db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db/errors";
@@ -7,6 +8,7 @@ import { projects } from "@/lib/db/schema";
 import type { Project } from "@/lib/db/schema";
 import { getPloiClient, PloiError } from "@/lib/ploi";
 import type { PloiApi } from "@/lib/ploi";
+import { redact } from "@/lib/logger";
 import { slugify } from "@/lib/validation";
 import { eq } from "drizzle-orm";
 
@@ -246,6 +248,22 @@ export const provisionSiteHandler: JobHandler = async ({
     deploymentId,
   );
   const mapped = await recordDeployment(project.id, deployment);
+
+  if (mapped.event === "deploy_failed") {
+    try {
+      await evaluateDeployFailed({
+        projectId: project.id,
+        projectName: project.name,
+        deploymentId: deployment.id,
+        message: deployment.commit_message ?? null,
+      });
+    } catch (error) {
+      logger.warn(
+        { projectId: project.id, error: redact(error) },
+        "deploy_failed alert evaluation failed",
+      );
+    }
+  }
 
   if (mapped.projectStatus === "failed") {
     throw new JobAbortError(`Deployment ${deploymentId} failed.`);

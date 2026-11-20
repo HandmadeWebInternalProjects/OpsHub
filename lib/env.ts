@@ -38,6 +38,8 @@ const envSchema = z.object({
   // Alert delivery
   SLACK_WEBHOOK_URL: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
+  // "From" address for alert emails (Resend needs a verified sender).
+  ALERT_EMAIL_FROM: z.string().default("OpsHub <alerts@opshub.example>"),
 
   // Worker
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10000),

@@ -533,6 +533,8 @@ LIGHTHOUSE_WEBHOOK_SECRET=
 # Alert delivery
 SLACK_WEBHOOK_URL=
 RESEND_API_KEY=
+# Verified sender for alert emails (Resend), e.g. "OpsHub <alerts@yourdomain.com>"
+ALERT_EMAIL_FROM=
 
 # Worker
 WORKER_POLL_INTERVAL_MS=10000
