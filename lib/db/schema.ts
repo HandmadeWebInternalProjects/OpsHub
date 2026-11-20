@@ -131,6 +131,10 @@ export const pageScores = pgTable("page_scores", {
   projectId: uuid("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  // Idempotency key for the Lighthouse webhook (M6). The reporter may send its
+  // own CI build id; otherwise the endpoint derives it from the payload hash so
+  // a repeated identical POST cannot insert a second row.
+  externalId: text("external_id").unique(),
   capturedAt: timestamp("captured_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -225,3 +229,5 @@ export type DeployEvent = typeof deployEvents.$inferSelect;
 export type NewDeployEvent = typeof deployEvents.$inferInsert;
 export type MetricsSnapshot = typeof metricsSnapshots.$inferSelect;
 export type NewMetricsSnapshot = typeof metricsSnapshots.$inferInsert;
+export type PageScore = typeof pageScores.$inferSelect;
+export type NewPageScore = typeof pageScores.$inferInsert;
