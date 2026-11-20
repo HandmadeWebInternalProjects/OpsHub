@@ -121,4 +121,11 @@ test("provisioning wizard creates a project through the worker", async ({
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name: projectName })).toBeVisible();
   await expect(page.getByText("Live", { exact: true })).toBeVisible();
+
+  // Redeploy (M4): queue a trigger_deploy job and watch the worker finish it.
+  await page.getByRole("button", { name: "Redeploy" }).click();
+  await expect(page.getByText("Deployment succeeded.")).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByText("Deployment completed")).toBeVisible();
 });
