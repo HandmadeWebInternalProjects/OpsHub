@@ -15,6 +15,13 @@
       "when": 1795128371891,
       "tag": "0001_slippery_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795134982714,
+      "tag": "0002_magenta_wonder_man",
+      "breakpoints": true
     }
   ]
 }

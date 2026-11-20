@@ -54,6 +54,12 @@ export const jobStatus = pgEnum("job_status", [
 
 export const userRole = pgEnum("user_role", ["admin", "engineer", "viewer"]);
 
+export const deployEventType = pgEnum("deploy_event_type", [
+  "deploy_started",
+  "deploy_completed",
+  "deploy_failed",
+]);
+
 // clients
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -150,6 +156,24 @@ export const auditSummaries = pgTable("audit_summaries", {
   ...timestamps,
 });
 
+// deploy_events (Ploi deployment history per project — M4)
+export const deployEvents = pgTable("deploy_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  // Ploi deployment id where known; the idempotency key for completed runs.
+  // Nullable because a "started" notification has no deployment id yet.
+  externalId: text("external_id").unique(),
+  event: deployEventType("event").notNull(),
+  status: text("status").notNull(),
+  message: text("message"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  ...timestamps,
+});
+
 // jobs (simple DB-backed queue)
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -193,3 +217,5 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
+export type DeployEvent = typeof deployEvents.$inferSelect;
+export type NewDeployEvent = typeof deployEvents.$inferInsert;
