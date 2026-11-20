@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 
 import { PloiLinkForm } from "@/components/projects/ploi-link-form";
@@ -9,11 +9,29 @@ import { DeployTimeline } from "@/components/projects/deploy-timeline";
 import { RedeployButton } from "@/components/projects/redeploy-button";
 import { ProjectForm } from "@/components/projects/project-form";
 import { StatusBadge } from "@/components/status-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ScoreTrendChart,
+  type ScorePoint,
+} from "@/components/charts/score-trend-chart";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { db } from "@/lib/db";
-import { clients, deployEvents, projects, servers } from "@/lib/db/schema";
+import {
+  clients,
+  deployEvents,
+  pageScores,
+  projects,
+  servers,
+} from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 type ExternalLinkProps = {
   label: string;
@@ -84,6 +102,24 @@ export default async function ProjectDetailPage({
     .where(eq(deployEvents.projectId, id))
     .orderBy(desc(deployEvents.occurredAt))
     .limit(20);
+
+  const scoreSince = new Date(Date.now() - THIRTY_DAYS_MS);
+  const scoreRows = await db
+    .select()
+    .from(pageScores)
+    .where(
+      and(eq(pageScores.projectId, id), gte(pageScores.capturedAt, scoreSince)),
+    )
+    .orderBy(asc(pageScores.capturedAt));
+
+  const scorePoints: ScorePoint[] = scoreRows.map((row) => ({
+    capturedAt: row.capturedAt.toISOString(),
+    performance: row.performance,
+    accessibility: row.accessibility,
+    bestPractices: row.bestPractices,
+    seo: row.seo,
+  }));
+  const latestScore = scoreRows.at(-1);
 
   return (
     <div className="flex flex-col gap-6">
@@ -171,6 +207,43 @@ export default async function ProjectDetailPage({
             defaultServerId={project.ploiServerId}
             defaultSiteId={project.ploiSiteId}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Page scores</CardTitle>
+          <CardDescription>
+            Lighthouse CI performance, accessibility, best practices and SEO
+            over the last 30 days.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {scorePoints.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No page scores yet. Point a Lighthouse CI pipeline at{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                POST /api/webhooks/lighthouse/&lt;projectId&gt;
+              </code>{" "}
+              to populate this chart (see the README).
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <ScoreTrendChart data={scorePoints} />
+              {latestScore ? (
+                <p className="text-xs text-muted-foreground">
+                  Latest capture{" "}
+                  {latestScore.capturedAt
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ")}{" "}
+                  UTC · performance {latestScore.performance} · accessibility{" "}
+                  {latestScore.accessibility} · best practices{" "}
+                  {latestScore.bestPractices} · SEO {latestScore.seo}
+                </p>
+              ) : null}
+            </div>
+          )}
         </CardContent>
       </Card>
 
