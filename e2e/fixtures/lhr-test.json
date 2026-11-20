@@ -1,0 +1,11 @@
+{
+  "finalUrl": "https://e2e-lighthouse.example/",
+  "requestedUrl": "https://e2e-lighthouse.example/",
+  "fetchTime": "2026-11-20T12:00:00.000Z",
+  "categories": {
+    "performance": { "score": 0.92 },
+    "accessibility": { "score": 0.98 },
+    "best-practices": { "score": 1 },
+    "seo": { "score": 0.91 }
+  }
+}

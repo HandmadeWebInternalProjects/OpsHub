@@ -1,9 +1,32 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "admin@opshub.local";
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin1234";
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+/**
+ * The M6 reporter signs its POST with LIGHTHOUSE_WEBHOOK_SECRET. The web server
+ * (next start) loads it from .env, so mirror process.env first then .env.
+ */
+function lighthouseSecret(): string {
+  if (process.env.LIGHTHOUSE_WEBHOOK_SECRET) {
+    return process.env.LIGHTHOUSE_WEBHOOK_SECRET;
+  }
+  try {
+    const contents = readFileSync(resolve(process.cwd(), ".env"), "utf8");
+    const match = contents.match(
+      /^\s*LIGHTHOUSE_WEBHOOK_SECRET\s*=\s*(.*)\s*$/m,
+    );
+    if (match?.[1]) return match[1];
+  } catch {
+    // No .env file — fall through to the default.
+  }
+  return "e2e-lighthouse-secret";
+}
 
 /**
  * The M3 provisioning wizard enqueues a job; the worker (mock Ploi) does the
@@ -154,5 +177,59 @@ test("dashboard shows fleet vitals and project health", async ({ page }) => {
   // Project health table.
   await expect(
     page.getByRole("heading", { name: "Project health" }),
+  ).toBeVisible();
+});
+
+test("lighthouse reporter populates the page score chart", async ({ page }) => {
+  const suffix = Date.now().toString(36);
+  const clientName = `Lighthouse Client ${suffix}`;
+  const projectName = `Lighthouse Project ${suffix}`;
+  const domain = `lh-${suffix}.example`;
+
+  // Log in.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // A client + a plain project (M6 needs no Ploi provisioning).
+  await page.goto("/clients/new");
+  await page.getByLabel("Name").fill(clientName);
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page).toHaveURL(/\/clients\/[0-9a-f-]{36}$/);
+  await page.getByRole("link", { name: "New project" }).click();
+  await page.getByRole("link", { name: "Create without provisioning" }).click();
+  await page.getByLabel("Name").fill(projectName);
+  await page.getByLabel("Domain").fill(domain);
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
+  const projectId = page.url().split("/").pop() as string;
+
+  // Run the reference client (M6) against a fixture Lighthouse result.
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/lighthouse-reporter.mjs", "--lhr", "e2e/fixtures/lhr-test.json"],
+    {
+      env: {
+        ...process.env,
+        OPSHUB_URL: BASE_URL,
+        OPSHUB_PROJECT_ID: projectId,
+        OPSHUB_EXTERNAL_ID: `e2e-${suffix}`,
+        LIGHTHOUSE_WEBHOOK_SECRET: lighthouseSecret(),
+      },
+      encoding: "utf8",
+    },
+  );
+  expect(result.status, result.stderr || result.stdout).toBe(0);
+
+  // Reload: the project detail page now renders the 30-day score chart.
+  await page.reload();
+  await expect(page.getByText("Page scores", { exact: true })).toBeVisible();
+  await expect(page.getByText(/performance 92/)).toBeVisible();
+  await expect(
+    page.locator(
+      '[role="img"][aria-label="Page score trend over the last 30 days"]',
+    ),
   ).toBeVisible();
 });
