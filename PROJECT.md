@@ -163,6 +163,18 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
   summary: text
 }
 
+// deploy_events  (Ploi deployment history per project — M4)
+{
+  id: uuid PK
+  project_id: uuid FK -> projects
+  external_id: text unique nullable  // Ploi deployment id; the idempotency key
+  event: enum('deploy_started', 'deploy_completed', 'deploy_failed')
+  status: text                       // raw Ploi status: deploying / success / failed / …
+  message: text nullable             // deploy log tail or commit message
+  occurred_at: timestamp
+  created_at / updated_at: timestamp
+}
+
 // jobs  (simple DB-backed queue)
 {
   id: uuid PK
@@ -468,6 +480,9 @@ ENCRYPTION_KEY=            # 32-byte base64, for integration_config
 # Ploi
 PLOI_API_TOKEN=
 PLOI_API_BASE=https://ploi.io/api
+# Shared secret for the Ploi deploy-notification webhook; embedded in the
+# callback URL you configure in the Ploi site's Notifications tab (no HMAC).
+PLOI_WEBHOOK_SECRET=
 
 # Lighthouse webhook
 LIGHTHOUSE_WEBHOOK_SECRET=
