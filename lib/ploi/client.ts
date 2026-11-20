@@ -180,6 +180,24 @@ export class PloiClient implements PloiApi {
     return parsed.data;
   }
 
+  /**
+   * Deployment history for a site, newest first (`GET
+   * /servers/{server}/sites/{site}/deployments`). A run that is still in
+   * progress is not listed until it finishes.
+   */
+  async listDeployments(
+    serverId: number,
+    siteId: number,
+    options: { perPage?: number } = {},
+  ): Promise<PloiDeployment[]> {
+    const query = options.perPage ? `?per_page=${options.perPage}` : "";
+    const parsed = await this.request(
+      `/servers/${serverId}/sites/${siteId}/deployments${query}`,
+      ploiPaginated(ploiDeploymentSchema),
+    );
+    return parsed.data;
+  }
+
   private async request<S extends z.ZodType>(
     endpoint: string,
     schema: S,

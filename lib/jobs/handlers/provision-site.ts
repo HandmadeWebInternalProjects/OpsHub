@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { pollDeploymentStatus, recordDeployment } from "@/lib/deploy";
 import { db } from "@/lib/db";
 import { isUniqueViolation } from "@/lib/db/errors";
 import { projects } from "@/lib/db/schema";
@@ -14,8 +15,6 @@ import type { JobHandler, JobHandlerResult, JobLogger } from "../types";
 
 /** How long the job waits for the site to appear before giving up. */
 const SITE_POLL_TIMEOUT_MS = 5 * 60_000;
-/** Deploys can be slower than site creation; allow a longer cap. */
-const DEPLOY_POLL_TIMEOUT_MS = 10 * 60_000;
 const MIN_POLL_DELAY_MS = 2_000;
 const MAX_POLL_DELAY_MS = 20_000;
 
@@ -176,32 +175,6 @@ async function pollSiteActive(
   }
 }
 
-/** Poll the deployment until it leaves the `deploying` state. */
-async function pollDeployment(
-  ploi: PloiApi,
-  serverId: number,
-  siteId: number,
-  deploymentId: string,
-): Promise<"success" | "failed"> {
-  const startedAt = Date.now();
-  let waitMs = MIN_POLL_DELAY_MS;
-
-  for (;;) {
-    const deployment = await ploi.getDeployment(serverId, siteId, deploymentId);
-    if (deployment.status === "success") return "success";
-    if (deployment.status === "failed") return "failed";
-
-    if (Date.now() - startedAt > DEPLOY_POLL_TIMEOUT_MS) {
-      throw new JobAbortError(
-        `Deployment ${deploymentId} was still "${deployment.status}" after 10 minutes.`,
-      );
-    }
-
-    await delay(waitMs);
-    waitMs = Math.min(waitMs * 2, MAX_POLL_DELAY_MS);
-  }
-}
-
 /**
  * `provision_site` (PROJECT.md §6, M3): create the project row, create the Ploi
  * site, wait for it to become active, then deploy (if a repo was configured).
@@ -266,19 +239,18 @@ export const provisionSiteHandler: JobHandler = async ({
     throw error;
   }
 
-  const outcome = await pollDeployment(
+  const deployment = await pollDeploymentStatus(
     ploi,
     input.ploiServerId,
     siteId,
     deploymentId,
   );
+  const mapped = await recordDeployment(project.id, deployment);
 
-  if (outcome === "failed") {
-    await setStatus(project.id, "failed");
+  if (mapped.projectStatus === "failed") {
     throw new JobAbortError(`Deployment ${deploymentId} failed.`);
   }
 
-  await setStatus(project.id, "live");
   return {
     summary: `Provisioned ${input.domain} and deployed successfully.`,
     data: { projectId: project.id, ploiSiteId: siteId, status: "live" },

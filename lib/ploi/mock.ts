@@ -181,6 +181,8 @@ export class MockPloiClient implements PloiApi {
   /** Mutable per-instance state so a mock provisioning run behaves like Ploi. */
   private readonly sites: Record<number, PloiSite[]> = structuredClone(SITES);
   private readonly deployments = new Map<string, PloiDeployment>();
+  /** Per-site deployment history, newest first (mirrors the list endpoint). */
+  private readonly deploymentHistory = new Map<number, PloiDeployment[]>();
   private nextSiteId = 900;
   private nextDeploymentSeq = 1;
 
@@ -255,17 +257,22 @@ export class MockPloiClient implements PloiApi {
       throw new Error(`Mock Ploi: no site ${siteId} on server ${serverId}`);
     }
     const id = `mock-deploy-${this.nextDeploymentSeq++}`;
-    this.deployments.set(id, {
+    const deployment: PloiDeployment = {
       id,
       status: "success",
-      commit_hash: null,
-      commit_message: null,
+      commit_hash: "mock-commit",
+      commit_message: `Mock deploy of ${site.domain}`,
       source: "api",
       human_source: "API",
       created_at: mockTimestamp(),
       log_id: null,
       log_url: null,
-    });
+    };
+    this.deployments.set(id, deployment);
+    this.deploymentHistory.set(siteId, [
+      deployment,
+      ...(this.deploymentHistory.get(siteId) ?? []),
+    ]);
     return {
       message: `Site ${site.domain} has been queued for deployment`,
       deploymentId: id,
@@ -284,6 +291,14 @@ export class MockPloiClient implements PloiApi {
       );
     }
     return structuredClone(deployment);
+  }
+
+  async listDeployments(
+    serverId: number,
+    siteId: number,
+  ): Promise<PloiDeployment[]> {
+    void serverId;
+    return structuredClone(this.deploymentHistory.get(siteId) ?? []);
   }
 }
 

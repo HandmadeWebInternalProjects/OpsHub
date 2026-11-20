@@ -190,4 +190,9 @@ export interface PloiApi {
     siteId: number,
     deploymentId: string,
   ): Promise<PloiDeployment>;
+  listDeployments(
+    serverId: number,
+    siteId: number,
+    options?: { perPage?: number },
+  ): Promise<PloiDeployment[]>;
 }

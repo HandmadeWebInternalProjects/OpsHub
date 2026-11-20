@@ -206,4 +206,31 @@ describe("PloiClient", () => {
     const calls = (fetchImpl as unknown as Mock).mock.calls;
     expect(calls[0]?.[0]).toBe("https://ploi.test/api/webserver-templates");
   });
+
+  it("lists a site's deployment history with the page size", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({
+        data: [
+          {
+            id: "dep-1",
+            status: "success",
+            commit_message: "Ship it",
+            created_at: "2026-11-11 14:02:51",
+          },
+        ],
+        meta: { current_page: 1, last_page: 1, per_page: 15, total: 1 },
+      }),
+    );
+
+    const deployments = await clientWith(fetchImpl).listDeployments(1, 7, {
+      perPage: 5,
+    });
+    expect(deployments).toHaveLength(1);
+    expect(deployments[0]?.status).toBe("success");
+
+    const calls = (fetchImpl as unknown as Mock).mock.calls;
+    expect(calls[0]?.[0]).toBe(
+      "https://ploi.test/api/servers/1/sites/7/deployments?per_page=5",
+    );
+  });
 });
