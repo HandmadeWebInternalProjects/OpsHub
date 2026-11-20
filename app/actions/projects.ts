@@ -10,6 +10,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isForeignKeyViolation, isUniqueViolation } from "@/lib/db/errors";
 import { projects } from "@/lib/db/schema";
+import { enqueueJob } from "@/lib/jobs/enqueue";
 import { logger, redact } from "@/lib/logger";
 import { ploiLinkSchema, projectFormSchema, slugify } from "@/lib/validation";
 
@@ -210,5 +211,56 @@ export async function linkProjectInfrastructure(
   } catch (error) {
     logger.error({ error: redact(error) }, "linkProjectInfrastructure failed");
     return { ok: false, error: "Could not save the Ploi link." };
+  }
+}
+
+/**
+ * Queue a `trigger_deploy` job for a linked project (PROJECT.md §6, M4). The
+ * worker performs the authorised deploy write; the button polls the job.
+ */
+export async function redeployProject(
+  id: string,
+): Promise<ActionResult<{ jobId: string }>> {
+  if (!(await isSignedIn())) {
+    return { ok: false, error: "You must be signed in." };
+  }
+
+  if (!z.uuid().safeParse(id).success) {
+    return { ok: false, error: "Invalid project id." };
+  }
+
+  try {
+    const [project] = await db
+      .select({
+        status: projects.status,
+        ploiServerId: projects.ploiServerId,
+        ploiSiteId: projects.ploiSiteId,
+      })
+      .from(projects)
+      .where(eq(projects.id, id))
+      .limit(1);
+
+    if (!project) {
+      return { ok: false, error: "Project not found." };
+    }
+    if (project.status === "archived") {
+      return { ok: false, error: "Archived projects cannot be deployed." };
+    }
+    if (project.ploiServerId == null || project.ploiSiteId == null) {
+      return {
+        ok: false,
+        error: "Link a Ploi server and site before deploying.",
+      };
+    }
+
+    const { id: jobId } = await enqueueJob({
+      type: "trigger_deploy",
+      payload: { projectId: id },
+    });
+
+    return { ok: true, data: { jobId } };
+  } catch (error) {
+    logger.error({ error: redact(error) }, "redeployProject failed");
+    return { ok: false, error: "Could not queue the deployment." };
   }
 }

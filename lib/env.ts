@@ -29,6 +29,8 @@ const envSchema = z.object({
   // Ploi
   PLOI_API_TOKEN: z.string().optional(),
   PLOI_API_BASE: z.string().default("https://ploi.io/api"),
+  // Shared secret for the unsigned Ploi deploy-notification webhook (M4).
+  PLOI_WEBHOOK_SECRET: z.string().optional(),
 
   // Lighthouse webhook
   LIGHTHOUSE_WEBHOOK_SECRET: z.string().optional(),

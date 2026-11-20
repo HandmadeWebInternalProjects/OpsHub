@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { PloiLinkForm } from "@/components/projects/ploi-link-form";
 import { ArchiveProjectButton } from "@/components/projects/archive-project-button";
+import { DeployTimeline } from "@/components/projects/deploy-timeline";
+import { RedeployButton } from "@/components/projects/redeploy-button";
 import { ProjectForm } from "@/components/projects/project-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
-import { clients, projects, servers } from "@/lib/db/schema";
+import { clients, deployEvents, projects, servers } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +78,13 @@ export default async function ProjectDetailPage({
     .from(servers)
     .orderBy(asc(servers.name));
 
+  const deployTimeline = await db
+    .select()
+    .from(deployEvents)
+    .where(eq(deployEvents.projectId, id))
+    .orderBy(desc(deployEvents.occurredAt))
+    .limit(20);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
@@ -90,10 +99,18 @@ export default async function ProjectDetailPage({
             <h1 className="text-2xl font-semibold">{project.name}</h1>
             <StatusBadge status={project.status} />
           </div>
-          <ArchiveProjectButton
-            projectId={project.id}
-            disabled={project.status === "archived"}
-          />
+          <div className="flex items-start gap-2">
+            <RedeployButton
+              projectId={project.id}
+              disabled={
+                project.status === "archived" || project.ploiSiteId == null
+              }
+            />
+            <ArchiveProjectButton
+              projectId={project.id}
+              disabled={project.status === "archived"}
+            />
+          </div>
         </div>
       </div>
 
@@ -156,6 +173,8 @@ export default async function ProjectDetailPage({
           />
         </CardContent>
       </Card>
+
+      <DeployTimeline events={deployTimeline} />
     </div>
   );
 }

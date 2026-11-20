@@ -21,6 +21,7 @@ export default defineConfig({
       NEXTAUTH_SECRET: "test-secret",
       ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       USE_MOCKS: "true",
+      PLOI_WEBHOOK_SECRET: "test-webhook-secret",
       LOG_LEVEL: "silent",
     },
   },
