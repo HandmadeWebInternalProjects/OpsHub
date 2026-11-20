@@ -231,3 +231,5 @@ export type MetricsSnapshot = typeof metricsSnapshots.$inferSelect;
 export type NewMetricsSnapshot = typeof metricsSnapshots.$inferInsert;
 export type PageScore = typeof pageScores.$inferSelect;
 export type NewPageScore = typeof pageScores.$inferInsert;
+export type AuditSummary = typeof auditSummaries.$inferSelect;
+export type NewAuditSummary = typeof auditSummaries.$inferInsert;
