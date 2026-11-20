@@ -281,3 +281,67 @@ test("cms audit sync surfaces a login failure", async ({ page }) => {
   }).toPass({ timeout: 60_000, intervals: [2_000, 5_000] });
   await expect(page.getByText("Failed admin login")).toBeVisible();
 });
+
+test("an alert rule fires and can be acknowledged", async ({ page }) => {
+  const suffix = Date.now().toString(36);
+  const clientName = `Alert Client ${suffix}`;
+  const projectName = `Alert Project ${suffix}`;
+  const domain = `alert-${suffix}.example`;
+
+  // Log in.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Client + a plain project with a CMS URL (the audit source).
+  await page.goto("/clients/new");
+  await page.getByLabel("Name").fill(clientName);
+  await page.getByRole("button", { name: "Create client" }).click();
+  await expect(page).toHaveURL(/\/clients\/[0-9a-f-]{36}$/);
+  await page.getByRole("link", { name: "New project" }).click();
+  await page.getByRole("link", { name: "Create without provisioning" }).click();
+  await page.getByLabel("Name").fill(projectName);
+  await page.getByLabel("Domain").fill(domain);
+  await page.getByLabel("CMS URL").fill("https://cms.example.com");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
+  const projectId = page.url().split("/").pop() as string;
+
+  // Configure the audit token so the worker can pull events.
+  await page.goto("/settings");
+  const tokenRow = page.locator(`[data-project-id="${projectId}"]`);
+  await tokenRow.getByLabel(/audit token/).fill("audit-token-e2e");
+  await tokenRow.getByRole("button", { name: "Save" }).click();
+  await expect(tokenRow.getByText("Token saved.")).toBeVisible();
+
+  // Configure an alert rule: repeated failed logins for this project.
+  await page.locator("#ruleType").click();
+  await page.getByRole("option", { name: "Failed logins (1h)" }).click();
+  await page.locator("#ruleProject").click();
+  await page.getByRole("option", { name: projectName }).click();
+  await page.locator("#threshold").fill("0");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await expect(page.getByText("Rule created.")).toBeVisible();
+
+  // Queue the audit pull; the worker (mock CMS) writes a login failure and the
+  // rule fires.
+  await page.getByRole("button", { name: "Sync audit logs now" }).click();
+
+  const alert = page
+    .locator("[data-alert-id]")
+    .filter({ hasText: projectName })
+    .first();
+  await expect(async () => {
+    await page.goto("/alerts");
+    await expect(alert).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 60_000, intervals: [2_000, 5_000] });
+
+  await expect(alert.getByText("Open")).toBeVisible();
+  await expect(alert.getByText(/Delivered/)).toBeVisible();
+
+  // Acknowledge it; the status flips and the button disappears.
+  await alert.getByRole("button", { name: "Acknowledge" }).click();
+  await expect(alert.getByText("Acknowledged", { exact: true })).toBeVisible();
+});

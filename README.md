@@ -314,6 +314,53 @@ module.exports = {
 With `USE_MOCKS=true` a mock provider stands in for both backends, so the job
 and the panel work locally with no client CMS.
 
+## Alerting (M8)
+
+Alerts fire when a metrics, page-score, deploy or audit event breaches a
+configured rule. Rules are managed on the **Settings** page and fired alerts
+appear on the **Alerts** page (and as an open-count badge in the sidebar), where
+each can be **acknowledged**.
+
+### Rules
+
+| Rule type                 | Fires when                          | Threshold |
+| ------------------------- | ----------------------------------- | --------- |
+| `server_disk_pct`         | disk usage **above** the threshold  | required  |
+| `page_score_performance`  | performance **below** the threshold | required  |
+| `deploy_failed`           | any deployment fails                | none      |
+| `audit_login_failed_count`| > threshold failed logins in 1 hour | required  |
+
+A rule is **fleet-wide** (no project) or scoped to one project. Evaluation runs
+inline on the event that produced the data:
+
+- **metrics** — `sync_server_metrics` (every 5 min) evaluates `server_disk_pct`;
+- **audit** — `pull_audit_logs` (every 15 min) evaluates
+  `audit_login_failed_count` over the last hour;
+- **deploy** — a failed deployment (Redeploy job or the Ploi webhook) evaluates
+  `deploy_failed`;
+- **page scores** — the Lighthouse webhook evaluates `page_score_performance`.
+
+While an alert for the same rule + subject is **open**, further breaches are
+suppressed (a partial unique index on `alerts.dedupe_key` WHERE status = 'open');
+the subject can fire again once its alert is acknowledged.
+
+### Delivery
+
+Each rule has a `channel` and an optional `destination`:
+
+- **webhook** — POSTs `{ "text": "…" }`. Slack and Google Chat incoming
+  webhooks both understand this shape, so one implementation covers both. The
+destination is the rule's own URL, falling back to `SLACK_WEBHOOK_URL`.
+- **email** — sent through **Resend** using `RESEND_API_KEY`; the recipient is
+the rule's destination and the sender is `ALERT_EMAIL_FROM`.
+
+Delivery success/failure is recorded on the alert (`delivered_at` /
+`delivery_error`) and shown on the Alerts page. A delivery failure never loses
+the alert itself.
+
+With `USE_MOCKS=true` a mock delivery records alerts as delivered without
+posting, so rules fire end-to-end locally with no webhook or Resend key.
+
 ## Status
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
@@ -335,4 +382,5 @@ reconciled against the Ploi API, idempotent).
 vitals with 7-day sparklines, the `sync_server_metrics` job (5-minute cadence,
 90-day retention), and a project-health table.
 **M6 — Page scores**: the signed `POST /api/webhooks/lighthouse/{projectId}` webhook, the reference CI client `scripts/lighthouse-reporter.mjs`, and a 30-day score chart on the project detail page.
-**M7 — Audit summaries**: the `pull_audit_logs` job (15-minute cadence) over the OpsHub audit contract, encrypted per-project tokens in Settings, and the “Recent security activity” panel. Later milestones are tracked in `MILESTONES.md`.
+**M7 — Audit summaries**: the `pull_audit_logs` job (15-minute cadence) over the OpsHub audit contract, encrypted per-project tokens in Settings, and the “Recent security activity” panel.
+**M8 — Alerting**: the `alert_rules`/`alerts` tables, inline rule evaluation on metrics/audit/deploy/page-score events, webhook + Resend email delivery, and the Alerts page with an acknowledge action. Later milestones are tracked in `MILESTONES.md`.
