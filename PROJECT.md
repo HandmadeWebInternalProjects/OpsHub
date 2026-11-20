@@ -144,6 +144,8 @@ Define these tables. Use `uuid` PKs, `created_at`/`updated_at` timestamps everyw
 {
   id: uuid PK
   project_id: uuid FK -> projects
+  external_id: text unique nullable  // idempotency key: reporter CI build id,
+                                     // else a hash of the POST body
   captured_at: timestamp
   url: text
   performance: integer  // 0-100
