@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M3 (Provisioning Wizard) code complete — verified against the mock adapter; live Ploi verification pending confirmation
+**Current:** M3 complete ✅ — M4 (Deployment status & webhooks) not started
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -74,7 +74,7 @@ server `1001` / site `501`, persisted in the DB.
 
 ---
 
-## M3 — Provisioning Wizard `[~]`
+## M3 — Provisioning Wizard `[x]`
 
 - [x] Wizard scaffold at `/projects/new`, 4 steps, Server Action transitions (2026-11-20, 8d361eb)
 - [x] Step 1: select existing client or create inline (2026-11-20, 8d361eb)
@@ -92,12 +92,16 @@ server `1001` / site `501`, persisted in the DB.
 
 **Acceptance:** A wizard run creates a real site on Ploi; project status
 transitions `provisioning → deploying → live`; failure surfaces clearly.
-⏳ Verified 2026-11-20 against the **mock adapter** (`USE_MOCKS=true`): an e2e
-run drove the wizard end-to-end through the worker (client → project → job →
-`live`), and one-off worker runs exercised the full create+deploy path
-(site created, deployed, `status = live`) plus idempotency (three runs,
-no duplicate site). **Live Ploi verification still pending** — needs a target
-server + domain and a real `PLOI_API_TOKEN` (approved in principle 2026-11-20).
+✅ Verified 2026-11-20 **live against Ploi** (`brutus-vps`, server 37668): a
+browser wizard run created site **436829 `opshub.handmadeweb.com.au`**
+(`active`, `/public`, no repository) and drove the project
+`provisioning → deploying → live`; the project detail page then showed the
+live site id `436829`. Read-only re-check confirmed the 5 pre-existing sites
+on the server were untouched. Also verified earlier the same day against the
+**mock adapter** (e2e wizard→worker→`live`, plus one-off create+deploy runs
+and idempotency: 3 runs, exactly 1 site). A real-data bug surfaced during live
+recon — the API returns `deploy_script` as script text, not a boolean; fixed
+in `b802c6f`.
 
 **Depends on:** M2
 
@@ -191,7 +195,32 @@ appears in the UI with an acknowledge action.
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
 
-### 2026-11-20 — M3 Provisioning Wizard (built; mock-verified, live verification pending)
+### 2026-11-20 — M3 live acceptance (milestone complete)
+- **Live Ploi verification done** (user-approved write, 2026-11-20): ran the
+  wizard in-browser against `brutus-vps` (server 37668) with `USE_MOCKS=false`.
+  Created client `Handmade Web` inline → project `OpsHub` / domain
+  `opshub.handmadeweb.com.au` → web directory `/public` → **Confirm**.
+  - Site **436829** `opshub.handmadeweb.com.au` created on Ploi; the project
+    went `provisioning → deploying → live`; the project detail page then showed
+    the live site id `436829` (from a live `GET /servers/37668/sites`).
+  - Read-only re-check: 6 sites on the server — the 5 pre-existing ones
+    unchanged, plus the new one (`active`, `has_repository: false`,
+    `system_user: ploi`).
+  - No repository was configured, so (as designed) no deploy was triggered.
+- **Real-data bug found + fixed** (`b802c6f`): `ploiSiteSchema.deploy_script`
+  was `boolean`, but the live API returns the deploy script **text**, so
+  `listSites`/`getSite` failed schema validation against real data (M2 was only
+  ever verified against mocks). Now `union([boolean, string])`, with a
+  regression assertion in `client.test.ts`.
+- **Live vs mock differences**: the account has no saved webserver templates
+  (`GET /webserver-templates` → `[]`), so the wizard's template dropdown is
+  empty (Ploi default); `GET /servers/monitored` returns only `brutus-vps`.
+- **Cleanup owed (local dev DB only)**: leftover rows from earlier mock/e2e
+  runs — servers `mock-web-01/02` and projects `Wizard …`/`E2E …`/`Verify …`.
+  The live run also left real site `436829`, which cannot be deleted.
+- M3 marked `[x]`; acceptance criteria met.
+
+### 2026-11-20 — M3 Provisioning Wizard (built; verified)
 - **Added**: Ploi write surface (`types.ts`/`client.ts`/`mock.ts`): `createSite`,
   `deploySite`, `getDeployment`, `listWebserverTemplates`, `listSystemUsers` +
   Zod schemas. `lib/jobs/errors.ts` (`JobAbortError` — terminal failures are
@@ -230,8 +259,8 @@ entries at the top.
   wizard → worker → `live` run) all green. One-off worker runs confirmed the
   create+deploy path → `live`, and idempotency across 3 runs (exactly 1 site).
 - **Outstanding**:
-  - **Live Ploi acceptance not yet run** — needs a target server + domain and a
-    real `PLOI_API_TOKEN` (user approved creating on live, 2026-11-20).
+  - ~~Live Ploi acceptance~~ — **done** later the same day (site 436829);
+    see the live acceptance entry above.
   - No unit test yet for the `provision_site` handler (needs a DB test harness;
     same gap as M2's `sync_servers` handler).
   - `provision_site` polls inside the handler, so one worker is blocked for up
