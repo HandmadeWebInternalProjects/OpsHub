@@ -99,19 +99,25 @@ const MONITORED_IDS: Record<
  */
 function recentStatistics(seed: number, points = 3): PloiServerStatistic[] {
   const minute = Math.floor(Date.now() / 60_000);
-  const stats: PloiServerStatistic[] = [];
+  const disk: Record<string, number> = {};
+  const cpu: Record<string, number> = {};
+  const ram: Record<string, number> = {};
   for (let i = points - 1; i >= 0; i -= 1) {
     const at = minute - i * 5;
     const wobble = at % 5;
-    stats.push({
-      cpu: (8 + seed * 6 + wobble).toFixed(1),
-      ram: (34 + seed * 8 + wobble * 0.6).toFixed(2),
-      disk: (58 + seed * 5).toFixed(0),
-      load_average: (0.2 + seed * 0.1 + wobble / 10).toFixed(2),
-      date: new Date(at * 60_000).toISOString().slice(0, 19).replace("T", " "),
-    });
+    const key = new Date(at * 60_000).toISOString().slice(11, 16);
+    disk[key] = 58 + seed * 5;
+    cpu[key] = Number((8 + seed * 6 + wobble).toFixed(1));
+    ram[key] = Number((34 + seed * 8 + wobble * 0.6).toFixed(2));
   }
-  return stats;
+
+  // Mirror the live `GET /servers/monitored` shape: named series, and no Load
+  // series (the live endpoint does not expose one).
+  return [
+    { name: "Disk", data: disk },
+    { name: "CPU", data: cpu },
+    { name: "RAM", data: ram },
+  ];
 }
 
 const SITES: Record<number, PloiSite[]> = {

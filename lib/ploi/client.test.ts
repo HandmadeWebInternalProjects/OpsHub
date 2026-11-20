@@ -68,6 +68,28 @@ describe("PloiClient", () => {
     );
   });
 
+  it("parses the live named-series statistics shape", async () => {
+    const fetchImpl = makeFetch(async () =>
+      jsonResponse({
+        data: [
+          {
+            id: 1,
+            name: "s1",
+            statistics: [
+              { name: "CPU", data: { "10:25": 4.1, "11:20": 0.7 } },
+              { name: "Disk", data: { "10:25": 54 } },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const servers = await clientWith(fetchImpl).listMonitoredServers();
+    const stats = servers[0]?.statistics ?? [];
+    expect(stats[0]?.name).toBe("CPU");
+    expect(stats[0]?.data?.["11:20"]).toBe(0.7);
+  });
+
   it("requests the server-scoped site path", async () => {
     const fetchImpl = makeFetch(async () =>
       jsonResponse({

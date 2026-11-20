@@ -11,14 +11,15 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 import { servers } from "@/lib/db/schema";
+import { parseMetrics } from "@/lib/metrics";
 import { ploiMonitoredServerSchema } from "@/lib/ploi";
 
 export const dynamic = "force-dynamic";
 
-function latestStatistic(raw: unknown) {
+function latestMetrics(raw: unknown) {
   const parsed = ploiMonitoredServerSchema.safeParse(raw);
   if (!parsed.success) return null;
-  return parsed.data.statistics.at(-1) ?? null;
+  return parseMetrics(parsed.data.statistics);
 }
 
 function statValue(value: string | null | undefined, suffix = "") {
@@ -73,17 +74,17 @@ export default async function ServersPage() {
               </TableRow>
             ) : (
               rows.map((server) => {
-                const latest = latestStatistic(server.rawJson);
+                const latest = latestMetrics(server.rawJson);
                 return (
                   <TableRow key={server.id}>
                     <TableCell className="font-medium">{server.name}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {server.ipAddress || "\u2014"}
                     </TableCell>
-                    <TableCell>{statValue(latest?.cpu, "%")}</TableCell>
-                    <TableCell>{statValue(latest?.ram, "%")}</TableCell>
-                    <TableCell>{statValue(latest?.disk, "%")}</TableCell>
-                    <TableCell>{statValue(latest?.load_average)}</TableCell>
+                    <TableCell>{statValue(latest?.cpuPct, "%")}</TableCell>
+                    <TableCell>{statValue(latest?.ramPct, "%")}</TableCell>
+                    <TableCell>{statValue(latest?.diskUsedPct, "%")}</TableCell>
+                    <TableCell>{statValue(latest?.loadAvg1m)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {syncedAt(server.lastSyncedAt)}
                     </TableCell>

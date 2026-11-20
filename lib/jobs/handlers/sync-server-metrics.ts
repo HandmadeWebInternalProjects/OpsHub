@@ -3,11 +3,7 @@ import { and, eq, lt, ne } from "drizzle-orm";
 import { evaluateServerDisk } from "@/lib/alerts";
 import { db } from "@/lib/db";
 import { metricsSnapshots, projects, servers } from "@/lib/db/schema";
-import {
-  latestStatistic,
-  metricsRetentionCutoff,
-  parseStatistic,
-} from "@/lib/metrics";
+import { metricsRetentionCutoff, parseMetrics } from "@/lib/metrics";
 import { getPloiClient } from "@/lib/ploi";
 import type { PloiMonitoredServer } from "@/lib/ploi";
 import { redact } from "@/lib/logger";
@@ -42,14 +38,12 @@ export const syncServerMetricsHandler: JobHandler = async ({
 
   for (const server of monitored) {
     const serverId = idByPloi.get(server.id);
-    const statistic = latestStatistic(server.statistics);
+    const metric = parseMetrics(server.statistics);
 
-    if (serverId == null || statistic == null) {
+    if (serverId == null || metric == null) {
       skipped += 1;
       continue;
     }
-
-    const metric = parseStatistic(statistic);
 
     const [existing] = await db
       .select({ id: metricsSnapshots.id })
@@ -122,10 +116,8 @@ async function evaluateDiskRules(
   let fired = 0;
   for (const server of monitored) {
     const serverId = idByPloi.get(server.id);
-    const statistic = latestStatistic(server.statistics);
-    const diskUsedPct = statistic
-      ? parseStatistic(statistic).diskUsedPct
-      : null;
+    const metric = parseMetrics(server.statistics);
+    const diskUsedPct = metric?.diskUsedPct ?? null;
     const diskPct = diskUsedPct == null ? null : Number(diskUsedPct);
 
     if (serverId == null || diskPct == null || !Number.isFinite(diskPct)) {

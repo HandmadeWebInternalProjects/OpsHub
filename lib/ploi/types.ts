@@ -29,8 +29,17 @@ export const ploiServerSchema = z.looseObject({
   created_at: z.string().nullish(),
 });
 
-/** One datapoint in `GET /servers/monitored`. */
+/** One entry in `GET /servers/monitored`'s `statistics` array.
+ *
+ * The docs show a flat per-datapoint shape (`cpu`/`ram`/`disk`/`load_average`/
+ * `date`), but the **live** API returns named time series
+ * (`{ name: "CPU", data: { "10:25": 4.1, … } }`) — verified 2026-11-20. Both are
+ * accepted; `lib/metrics.ts` normalises either into a snapshot row. */
 export const ploiServerStatisticSchema = z.looseObject({
+  // Live shape: a named series of time → value samples.
+  name: z.string().nullish(),
+  data: z.record(z.string(), z.union([z.number(), z.string()])).nullish(),
+  // Documented / legacy flat shape, tolerated for compatibility.
   cpu: z.string().nullish(),
   ram: z.string().nullish(),
   disk: z.string().nullish(),
