@@ -196,6 +196,124 @@ POST cannot create a second row. The project detail page shows the score chart
 over the last 30 days, and the dashboard's project-health table shows the latest
 performance score.
 
+## Audit summaries (M7)
+
+OpsHub pulls recent audit/security events from each project's content backend
+and shows the last 20 on the project page.
+
+### The OpsHub audit contract
+
+Neither CMS exposes a token-usable audit feed out of the box (Payload has no
+built-in audit source; Strapi's `strapi-cms-audit-log` routes are admin-session
+only). So OpsHub pulls **one normalised contract** and the client CMS adapts its
+native audit data to it:
+
+```
+GET {cms_url}/api/opshub/audit?since=<ISO8601>&limit=50
+Authorization: Bearer <cms_token_{projectId}>
+
+200 { "events": [ { "id", "type", "actor", "ip", "summary", "occurredAt" } ] }
+```
+
+- `id` — stable event id; the idempotency key (`audit_summaries.external_id`).
+- `type` — e.g. `login_failed`, `content_deleted`, `permission_changed`.
+- `actor` / `ip` — nullable.
+- `occurredAt` — ISO 8601.
+
+### Configure a project
+
+1. On the project page, set the project's **CMS URL**.
+2. On **Settings**, paste the project's audit token. It is stored encrypted in
+   `integration_config` (`cms_token_{projectId}`) and never shown again.
+3. OpsHub pulls every 15 minutes; **Sync audit logs now** on Settings queues an
+   immediate run (the worker performs the pull, so run it alongside the app).
+
+### Reference adapters
+
+**Payload** — a top-level custom endpoint (`payload.config.ts`) that serves your
+activity-log collection:
+
+```ts
+endpoints: [
+  {
+    path: "/opshub/audit",
+    method: "get",
+    handler: async (req) => {
+      const token = (req.headers.get("authorization") ?? "").replace(
+        "Bearer ",
+        "",
+      );
+      if (token !== process.env.OPSHUB_AUDIT_TOKEN)
+        return Response.json({}, { status: 401 });
+      const since = req.query?.since ? new Date(String(req.query.since)) : null;
+      const logs = await req.payload.find({
+        collection: "activity-logs",
+        sort: "-createdAt",
+        limit: Math.min(Number(req.query?.limit ?? 50), 50),
+        where: since
+          ? { createdAt: { greater_than: since.toISOString() } }
+          : {},
+      });
+      return Response.json({
+        events: logs.docs.map((doc) => ({
+          id: String(doc.id),
+          type: doc.operation ?? "content_updated",
+          actor: doc.userEmail ?? null,
+          ip: doc.ip ?? null,
+          summary: `${doc.operation ?? "change"} on ${doc.collection ?? "content"}`,
+          occurredAt: doc.createdAt,
+        })),
+      });
+    },
+  },
+];
+```
+
+**Strapi** — a custom content-API route that reads the audit plugin's service:
+
+```js
+// src/api/opshub/routes/opshub.js
+module.exports = {
+  routes: [
+    {
+      method: "GET",
+      path: "/opshub/audit",
+      handler: "opshub.audit",
+      config: { auth: false },
+    },
+  ],
+};
+
+// src/api/opshub/controllers/opshub.js
+module.exports = {
+  async audit(ctx) {
+    const token = (ctx.request.header.authorization ?? "").replace(
+      "Bearer ",
+      "",
+    );
+    if (token !== process.env.OPSHUB_AUDIT_TOKEN) return ctx.unauthorized();
+    const since = ctx.query.since ? new Date(ctx.query.since) : undefined;
+    const { results } = await strapi
+      .plugin("audit-log")
+      .service("audit")
+      .find({ page: 1, pageSize: 50, sort: "createdAt:desc", dateFrom: since });
+    ctx.body = {
+      events: results.map((row) => ({
+        id: String(row.id),
+        type: row.action === "login.failed" ? "login_failed" : row.action,
+        actor: row.userEmail ?? null,
+        ip: row.ipAddress ?? null,
+        summary: `${row.action} (${row.outcome ?? "success"})`,
+        occurredAt: row.createdAt,
+      })),
+    };
+  },
+};
+```
+
+With `USE_MOCKS=true` a mock provider stands in for both backends, so the job
+and the panel work locally with no client CMS.
+
 ## Status
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
@@ -216,4 +334,5 @@ reconciled against the Ploi API, idempotent).
 **M5 — Fleet vitals dashboard**: the `/dashboard` fleet summary, per-server
 vitals with 7-day sparklines, the `sync_server_metrics` job (5-minute cadence,
 90-day retention), and a project-health table.
-**M6 — Page scores**: the signed `POST /api/webhooks/lighthouse/{projectId}` webhook, the reference CI client `scripts/lighthouse-reporter.mjs`, and a 30-day score chart on the project detail page. Later milestones are tracked in `MILESTONES.md`.
+**M6 — Page scores**: the signed `POST /api/webhooks/lighthouse/{projectId}` webhook, the reference CI client `scripts/lighthouse-reporter.mjs`, and a 30-day score chart on the project detail page.
+**M7 — Audit summaries**: the `pull_audit_logs` job (15-minute cadence) over the OpsHub audit contract, encrypted per-project tokens in Settings, and the “Recent security activity” panel. Later milestones are tracked in `MILESTONES.md`.

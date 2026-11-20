@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M6 complete ✅ — M7 (Audit summaries) not started
+**Current:** M7 complete ✅ — M8 (Alerting) not started
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -183,20 +183,27 @@ tests cover the rejection paths (missing/wrong signature → `401`, malformed JS
 
 ---
 
-## M7 — Audit summaries `[ ]`
+## M7 — Audit summaries `[x]`
 
-- [ ] Settings page: per-project CMS API token (stored encrypted in
-      `integration_config`)
-- [ ] `pull_audit_logs` job: every 15 min per project, fetch last 50 events
+- [x] Settings page: per-project CMS API token (stored encrypted in
+      `integration_config`) (2026-11-20, 4cdf701 + 6a1f5ac)
+- [x] `pull_audit_logs` job: every 15 min per project, fetch last 50 events
       since last sync via a `lib/cms` provider, upsert `audit_summaries`
-      (dedupe on `external_id`)
-- [ ] `PayloadProvider` (default) and `StrapiProvider` behind the
-      `NullCmsProvider` fallback
-- [ ] Project detail page: "Recent security activity" panel (last 20 events)
-- [ ] Content-backend audit setup documented in README
+      (dedupe on `external_id`) (2026-11-20, 8ea300c)
+- [x] `PayloadProvider` and `StrapiProvider` behind the `NullCmsProvider`
+      fallback (2026-11-20, f604ae9) — both read the OpsHub audit contract, not
+      a CMS-specific API (see Spec change below)
+- [x] Project detail page: "Recent security activity" panel (last 20 events)
+      (2026-11-20, 4cdf701)
+- [x] Content-backend audit setup documented in README (2026-11-20, README)
 
 **Acceptance:** A login failure on a test content backend appears in OpsHub
-within 15 minutes.
+within 15 minutes.  ✅ Verified 2026-11-20: `pnpm test:e2e` (5 passed) creates a
+project with a CMS URL, saves its audit token in Settings, queues
+`pull_audit_logs`, and asserts a mock `login_failed` event reaches the project's
+"Recent security activity" panel (11.9s — the worker's 10s poll stands in for
+the 15-minute cadence). Unit tests cover the crypto round-trip/tamper cases and
+the audit-contract client (auth header, `since`/`limit`, error/bad-shape paths).
 
 **Depends on:** M1
 
@@ -222,6 +229,50 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M7 Audit summaries (built; acceptance verified)
+- **Added:** `lib/crypto.ts` (AES-256-GCM, `iv:tag:ciphertext`, key from
+  `ENCRYPTION_KEY`) + tests. `lib/integration-config.ts` (per-project token in
+  `integration_config` keyed `cms_token_{projectId}`). The `lib/cms` audit
+  contract client (`http-provider.ts`) + `PayloadProvider`/`StrapiProvider` +
+  `lib/cms/mock.ts`. `lib/jobs/handlers/pull-audit-logs.ts` + handler
+  registration; the worker enqueues `pull_audit_logs` every 15 min.
+  `app/actions/settings.ts`, the Settings page (per-project token + **Sync audit
+  logs now**), and the project page's "Recent security activity" panel.
+- **Spec change (user-approved 2026-11-20):** the §5.3 "API-token pull" model
+  cannot work as written — **Strapi's `strapi-cms-audit-log` routes are
+  admin-session only** (verified: no content-api route, so no API-token access),
+  and **Payload's audit source is TBD** (§5.3 already said so). M7 instead pulls
+  one **OpsHub audit contract** (`GET {cms_url}/api/opshub/audit?since=&limit=50`,
+  `Authorization: Bearer <token>`, `{ events: [...] }`), with reference adapters
+  (Payload custom endpoint, Strapi route) in the README. PROJECT.md §5.3
+  rewritten accordingly.
+- **Decisions (user, 2026-11-20):** (1) the contract + reference adapters;
+  (2) acceptance verified with a mock provider under `USE_MOCKS` (like
+  Ploi/M5); (3) AES-256-GCM for secrets, per-project token in Settings.
+- **Cadence:** one `pull_audit_logs` job covers the whole fleet and the worker
+  re-enqueues it every 15 min via `enqueueIfStale` (per-project cadence by
+  iteration), matching the M2/M5 recurring-job pattern. `since` = the newest
+  stored `audit_summaries.captured_at` for the project; dedupe on `external_id`.
+- **Commits:** `ef6f9b9` (PROJECT.md §5.3), `6a1f5ac` (crypto + config),
+  `f604ae9` (providers + mock), `8ea300c` (job), `4cdf701` (settings + panel),
+  `46a494b` (e2e), and this docs commit.
+- **Verification (2026-11-20):** `tsc --noEmit`, `eslint`, `prettier`,
+  `pnpm test` (45 — +crypto 5, +audit client 4), `pnpm build`, `pnpm test:e2e`
+  (5 passed) all green. Mock job wrote `audit_summaries` rows (checked the DB).
+- **Notes / follow-up:**
+  - No live client CMS to verify against; the contract adapters are
+    documented + unit-tested, and the mock covers the end-to-end path. A real
+    Payload/Strapi verification is outstanding (needs a client backend).
+  - `strapi-cms-audit-log` route shapes were verified against its docs; the
+    README adapter is illustrative and may need field-name tweaks per plugin
+    version.
+  - The `pull_audit_logs` handler has no unit test (DB harness still missing —
+    same gap as `sync_servers`/`provision_site`).
+  - A `pnpm dev` server was running on :3000 during verification, so Playwright
+    reused it and exposed a pre-existing ambiguous selector (`Next` also matched
+    the dev-tools button); fixed with `exact: true`, and the suite verified
+    against a clean production server on :3100.
 
 ### 2026-11-20 — M6 Page scores (built; acceptance verified)
 - **Added:** `page_scores.external_id` (unique) + migration
