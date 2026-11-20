@@ -1,6 +1,6 @@
 # Milestones
 
-**Current:** M3 complete ✅ — M4 (Deployment status & webhooks) not started
+**Current:** M4 complete ✅ — M5 (Fleet vitals dashboard) not started
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
 
@@ -107,16 +107,27 @@ in `b802c6f`.
 
 ---
 
-## M4 — Deployment status & webhooks `[ ]`
+## M4 — Deployment status & webhooks `[x]`
 
-- [ ] `deploy_events` table (project_id, event, status, timestamp, message)
-- [ ] `POST /api/webhooks/ploi/deploy-complete`: validate signature,
+- [x] `deploy_events` table (project_id, event, status, timestamp, message) (2026-11-20, b6c0464)
+- [x] `POST /api/webhooks/ploi/deploy-complete`: authenticate the callback,
       update `project.status`, insert `deploy_events` row (idempotent)
-- [ ] Project detail page: deploy timeline (last 20 events)
-- [ ] Manual "Redeploy" button → `POST /sites/{id}/deploy`
+      (2026-11-20, 869d1c9) — Ploi sends **no** HMAC signature, so the endpoint
+      is token-authenticated (secret embedded in the callback URL) and
+      reconciles the real status via `GET .../deployments`
+- [x] Project detail page: deploy timeline (last 20 events) (2026-11-20, 869d1c9)
+- [x] Manual "Redeploy" button → `POST /servers/{server}/sites/{id}/deploy`
+      (2026-11-20, a0b4d8d + 869d1c9)
 
-**Acceptance:** A repo push (or Redeploy click) updates project status in
-real time; the deploy timeline reflects the sequence accurately.
+**Acceptance:** A repo push (or Redeploy click) updates project status in real
+time; the deploy timeline reflects the sequence accurately. ✅ Verified
+2026-11-20: the **Redeploy** path end-to-end under the mock adapter (Playwright:
+wizard project → `trigger_deploy` job → project `live` + a `Deployment completed`
+timeline entry), and the **webhook** handler driven directly against the local DB
+(started → `deploying`; completed → API reconcile → `deploy_completed` event +
+`live`; a repeated notification was idempotent — deduped on the Ploi deployment
+id). The live Ploi panel notification URL was **not** exercised (needs a real
+client repo + a manual Ploi-panel step) — see Session Log.
 
 **Depends on:** M3
 
@@ -194,6 +205,90 @@ appears in the UI with an acknowledge action.
 
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
+
+### 2026-11-20 — M4 Deployment status & webhooks (built; acceptance verified)
+- **Added:** `deploy_events` table + `deploy_event_type` enum (migration
+  `0002_magenta_wonder_man.sql`). `lib/deploy.ts` (`mapDeploymentStatus`,
+  `insertDeployEvent`, `recordDeployment`, `pollDeploymentStatus`,
+  `parsePloiDate`) shared by the job handler and the webhook.
+  `lib/jobs/handlers/trigger-deploy.ts`; `PloiApi.listDeployments`
+  (`GET /servers/{server}/sites/{site}/deployments`) + mock support.
+  `POST /api/webhooks/ploi/deploy-complete` (token-authenticated, reconciles via
+  the API, idempotent). `redeployProject` action + `Redeploy` button +
+  `DeployTimeline`. New `PLOI_WEBHOOK_SECRET` env var.
+- **Spec change (approved by user 2026-11-20):** the M4 checklist's "validate
+  Ploi's webhook signature" is not implementable — Ploi sends no HMAC / signing
+  secret (verified against developers.ploi.io). M4 instead authenticates the
+  callback with `PLOI_WEBHOOK_SECRET` embedded in the URL and treats the
+  notification as a trigger that re-reads the authoritative deployment state.
+  `deploy_events` added to PROJECT.md §4 and `PLOI_WEBHOOK_SECRET` to §8.
+- **Also refactored:** `provision_site` now uses the shared
+  `pollDeploymentStatus` / `recordDeployment`, so the initial provisioning
+  deploy also appears on the timeline.
+- **Commits:** `b6c0464` (schema + migration), `c118fd5` (PROJECT.md spec),
+  `a0b4d8d` (deploy layer + `trigger_deploy`), `869d1c9` (webhook + UI),
+  `6062ec5` (e2e), `7eec445` (README).
+- **Verification (2026-11-20, mock adapter):** `tsc`, `eslint`, `prettier`,
+  `pnpm test` (25), `pnpm build`, `pnpm test:e2e` (2 passed, incl. Redeploy →
+  worker → status + timeline) all green. The webhook handler was driven directly
+  against the local DB: a `started` notification set `deploying`; a `completed`
+  notification reconciled the mock deployment → `deploy_completed` event +
+  `live`; a repeated completion was deduped (idempotent).
+- **Outstanding / follow-up:**
+  - **Live Ploi webhook not exercised.** Pointing the site Notifications tab at
+    OpsHub needs a real repo + a manual Ploi-panel step + a real deploy, which
+    the mock adapter cannot cover. README documents the exact URL.
+  - No unit test for the `trigger_deploy` handler (DB test harness still
+    missing — same gap as `sync_servers` / `provision_site`).
+  - `deploy_events.external_id` is globally unique (Ploi deployment ids are
+    global); the mock reuses `mock-deploy-N` per process, which can collide
+    across ad-hoc local runs only.
+
+### 2026-11-20 — M4 recon: Ploi has no signed deploy-complete webhook (BLOCKER)
+- **M4 has not been started.** This entry records a spec discrepancy found while
+  verifying external API shapes before writing code (agent contract: never
+  assume an API shape; stop and ask).
+- **Verified against developers.ploi.io (2026-11-20):**
+  - **There is no documented signed (HMAC) outbound “deploy-complete” webhook.**
+    M4’s checklist says the route handler must “validate signature”; Ploi
+    documents no signature/secret header on anything it sends to us.
+  - What Ploi *does* send toward us:
+    1. **Site `webhook_url`** (set on `POST /servers/{server}/sites`): a
+       **one-shot** “site created/installed” POST — payload
+       `{ message, server:{id,name}, site:{id,domain,ip,paths} }`. Explicitly no
+       retry, and it fires on **site creation**, not on deploy completion.
+    2. **Notification channels** (Slack/Discord/Teams/Google Chat/Rocket.Chat/
+       Telegram/Pushover/Email/Mobile), configured **per site in the Ploi
+       panel** (not via the API), with events `Deployment started` /
+       `Deployment completed` / `Deployment failed`. A site can point the
+       “webhook” notification_url at a custom URL; the marketing docs show a
+       sample payload `{ "data": { "server_id", "site_id",
+       "latest_deploy_log", "root_domain" } }` — **no signature**, and the
+       success/failure signal is inside log text, not a clean status field.
+  - The “Deploy webhook URL” (`ploi.io/webhooks/.../deploy?token=…`) is
+    **inbound** (we POST to Ploi to trigger a deploy); it is not a callback.
+- **Implication:** `POST /api/webhooks/ploi/deploy-complete` cannot be built to
+  “validate Ploi’s webhook signature” as written. A decision is needed (see
+  questions raised to the user) on the webhook auth model and/or whether M4’s
+  real-time path is the per-site custom notification URL vs. polling.
+- **Other findings:**
+  - Ploi now documents **`GET /servers/{server}/sites/{site}/deployments`**
+    (history, newest first, statuses `success|failed|scheduled|cancelled`,
+    `meta` pagination; `?include_logs=true` adds `log_content`) and
+    **Get deployment log**. Useful for M4’s timeline and to reconcile deploys
+    without a webhook. (Current `PloiApi` only has `getDeployment`.)
+  - The `deploy_events` table M4 requires is **not in PROJECT.md §4** — it exists
+    only as the M4 checklist line. Adding it is a schema addition that needs a
+    §4 proposal/approval.
+- **Status:** M4 blocked pending a user decision; no code written.
+- **Resolution (user, 2026-11-20):** confirmed the Notifications-tab model — a
+  site can have custom webhook URLs for *deployment started* and *deployment
+  finished*; Ploi POSTs plain JSON (`server_id`, `site_id`, `latest_deploy_log`,
+  `root_domain`) with **no HMAC and no signing secret**. M4 will therefore be
+  built against reality, not the “validate signature” wording: authenticate the
+  endpoint with an OpsHub-owned secret embedded in the callback URL, and treat
+  the webhook as a trigger that re-reads `GET .../deployments` for the
+  authoritative status (the log text is not a reliable success/failure field).
 
 ### 2026-11-20 — M3 live acceptance (milestone complete)
 - **Live Ploi verification done** (user-approved write, 2026-11-20): ran the
