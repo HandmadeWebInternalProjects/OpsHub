@@ -271,30 +271,39 @@ so only deploy when a repository is configured.
 
 ### 5.3 Content-backend audit logs
 
-OpsHub pulls audit/activity events through a provider interface in `lib/cms/`,
-mirroring the uptime provider (§5.4):
+OpsHub pulls audit/activity events through a provider interface in `lib/cms/`:
 
     interface CmsProvider {
       listAuditEvents(project, since): Promise<AuditEvent[]>
     }
 
-Implementations: `PayloadProvider` (default), `StrapiProvider` (uses the
-community plugin `strapi-cms-audit-log`), and `NullCmsProvider` for projects
-without an audit source (v1 default).
+Implementations: `PayloadProvider`, `StrapiProvider`, a mock provider
+(`USE_MOCKS=true`), and `NullCmsProvider` for projects without an audit source.
 
-**Flow:** A recurring job (`pull_audit_logs`) runs every 15 minutes per project.
-For each project with a `cms_url` and a configured API token:
-1. Fetch the last 50 audit events since the last successful sync.
-2. Map to `audit_summaries` rows (deduplicated by the backend event ID — the
+Both real providers read a single **OpsHub audit contract** rather than a
+CMS-specific API, because neither backend exposes a token-usable audit feed
+(Payload has no built-in audit source; Strapi's `strapi-cms-audit-log` routes
+are admin-session only). The client CMS serves one read-only endpoint that
+normalises its native audit data:
+
+    GET {cms_url}/api/opshub/audit?since=<ISO8601>&limit=50
+    Authorization: Bearer <cms_token_{project_id}>
+    200 { "events": [ { id, type, actor, ip, summary, occurredAt } ] }
+
+The README ships reference adapters — a Payload custom endpoint and a Strapi
+route — that serve this shape from each backend's own audit source.
+
+**Flow:** A recurring job (`pull_audit_logs`) runs every 15 minutes for the
+fleet. For each non-archived project with a `cms_url` and a configured token:
+1. Fetch the last 50 events since the last successful sync (`since` = the newest
+   stored `audit_summaries.captured_at` for that project).
+2. Upsert into `audit_summaries`, deduplicated on the contract event `id` (the
    `external_id` column).
 3. Store only the summary fields; do not store raw diffs.
 
-**Phase 2:** Store secrets per-project in `integration_config` keyed by
-`cms_token_{project_id}`.
-
-**Payload:** its audit/activity source is TBD. M7 ships behind
-`NullCmsProvider` until the Payload adapter is defined and verified against
-Payload's docs.
+**Secrets:** per-project tokens live in `integration_config` keyed by
+`cms_token_{project_id}`, encrypted at rest with `ENCRYPTION_KEY`
+(`lib/crypto.ts`, AES-256-GCM), and are set from the Settings page.
 
 ### 5.4 Uptime monitoring (deferred integration point)
 
