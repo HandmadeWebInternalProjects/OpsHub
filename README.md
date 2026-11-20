@@ -75,7 +75,8 @@ pnpm dev      # or pnpm start
 pnpm worker   # in a second terminal
 ```
 
-The worker also enqueues `sync_servers` every 5 minutes automatically.
+The worker also enqueues `sync_servers` and `sync_server_metrics` every 5
+minutes automatically.
 
 ## Provisioning wizard (M3)
 
@@ -130,6 +131,25 @@ the recorded event is correct even though the notification carries no status
 field. Writes are deduplicated on the Ploi deployment id, so a repeated
 notification cannot double-count.
 
+## Fleet vitals dashboard (M5)
+
+`/dashboard` is the fleet overview:
+
+- **Fleet summary** — cached servers, live projects and failing projects.
+- **Server cards** — the latest CPU, RAM, disk and load for each cached server,
+  each with a 7-day sparkline built from `metrics_snapshots`. The sparkline is a
+  small inline SVG (`components/charts/sparkline.tsx`); no charting dependency
+  is pulled in yet.
+- **Project health** — status, last deploy and latest page score per project.
+
+The `sync_server_metrics` job runs every 5 minutes alongside `sync_servers`: it
+reads `GET /servers/monitored`, upserts the server cache, writes one
+`metrics_snapshots` row per server for the latest datapoint, and prunes rows
+older than 90 days. Ploi reports RAM as a **percentage** (not MB), so it is
+stored in `metrics_snapshots.ram_pct`; `ram_used_mb` remains for real MB data if
+a source appears later. The mock adapter advances its datapoints over time, so
+sparklines trend locally.
+
 ## Status
 
 **M0 — Foundation** complete: authentication, navigation shell, empty
@@ -146,5 +166,8 @@ and the job-progress UI.
 **M4 — Deployment status & webhooks**: the `deploy_events` timeline, the
 `trigger_deploy` job + **Redeploy** button, and the
 `POST /api/webhooks/ploi/deploy-complete` callback (token-authenticated,
-reconciled against the Ploi API, idempotent). Later milestones are tracked in
-`MILESTONES.md`.
+reconciled against the Ploi API, idempotent).
+**M5 — Fleet vitals dashboard**: the `/dashboard` fleet summary, per-server
+vitals with 7-day sparklines, the `sync_server_metrics` job (5-minute cadence,
+90-day retention), and a project-health table.
+**M6 — Page scores** and later milestones are tracked in `MILESTONES.md`.

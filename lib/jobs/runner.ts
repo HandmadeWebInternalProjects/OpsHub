@@ -162,9 +162,10 @@ export async function enqueueIfStale(
   }
 }
 
-/** Recurring jobs this worker keeps alive (M2: server list sync every 5 min). */
+/** Recurring jobs this worker keeps alive (M2/M5: servers + metrics every 5 min). */
 export async function ensureRecurringJobs(): Promise<void> {
   await enqueueIfStale("sync_servers", RECURRING_SYNC_INTERVAL_MS);
+  await enqueueIfStale("sync_server_metrics", RECURRING_SYNC_INTERVAL_MS);
 }
 
 /**

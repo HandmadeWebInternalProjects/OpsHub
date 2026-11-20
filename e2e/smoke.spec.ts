@@ -129,3 +129,30 @@ test("provisioning wizard creates a project through the worker", async ({
   });
   await expect(page.getByText("Deployment completed")).toBeVisible();
 });
+
+test("dashboard shows fleet vitals and project health", async ({ page }) => {
+  // Log in.
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(ADMIN_EMAIL);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // Fleet summary.
+  await expect(page.getByText("Projects live")).toBeVisible();
+  await expect(page.getByText("Projects failing")).toBeVisible();
+
+  // Server cards: the worker's sync_server_metrics job writes the mock
+  // snapshots, so a 7-day sparkline appears for each metric.
+  await expect(page.getByText("mock-web-01").first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(
+    page.locator('svg[aria-label*="over the last 7 days"]').first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // Project health table.
+  await expect(
+    page.getByRole("heading", { name: "Project health" }),
+  ).toBeVisible();
+});

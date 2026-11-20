@@ -1,0 +1,1 @@
+ALTER TABLE "metrics_snapshots" ADD COLUMN "ram_pct" numeric(5, 2);

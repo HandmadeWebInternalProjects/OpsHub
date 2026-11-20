@@ -115,6 +115,10 @@ export const metricsSnapshots = pgTable("metrics_snapshots", {
     .notNull()
     .defaultNow(),
   cpuPct: numeric("cpu_pct", { precision: 5, scale: 2 }),
+  // Ploi's monitored endpoint reports RAM as a percentage (e.g. "36.32"), not
+  // megabytes, so the M5 dashboard charts the percentage here. `ram_used_mb`
+  // stays for real MB data if a source for it appears later.
+  ramPct: numeric("ram_pct", { precision: 5, scale: 2 }),
   ramUsedMb: integer("ram_used_mb"),
   diskUsedPct: numeric("disk_used_pct", { precision: 5, scale: 2 }),
   loadAvg1m: numeric("load_avg_1m", { precision: 8, scale: 2 }),
@@ -219,3 +223,5 @@ export type Job = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type DeployEvent = typeof deployEvents.$inferSelect;
 export type NewDeployEvent = typeof deployEvents.$inferInsert;
+export type MetricsSnapshot = typeof metricsSnapshots.$inferSelect;
+export type NewMetricsSnapshot = typeof metricsSnapshots.$inferInsert;

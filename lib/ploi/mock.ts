@@ -5,6 +5,7 @@ import type {
   PloiDeployment,
   PloiMonitoredServer,
   PloiServer,
+  PloiServerStatistic,
   PloiSite,
   PloiSystemUser,
   PloiWebserverTemplate,
@@ -82,45 +83,36 @@ const SERVERS: PloiServer[] = [
   },
 ];
 
-const MONITORED: PloiMonitoredServer[] = [
-  {
-    id: 1001,
-    name: "mock-web-01",
-    ip: "203.0.113.10",
-    url: "https://ploi.io/panel/servers/1001",
-    statistics: [
-      {
-        cpu: "12.4",
-        ram: "41.10",
-        disk: "63",
-        load_average: "0.42",
-        date: "2026-11-20 09:00:00",
-      },
-      {
-        cpu: "15.1",
-        ram: "42.30",
-        disk: "63",
-        load_average: "0.55",
-        date: "2026-11-20 09:05:00",
-      },
-    ],
-  },
-  {
-    id: 1002,
-    name: "mock-web-02",
-    ip: "203.0.113.20",
-    url: "https://ploi.io/panel/servers/1002",
-    statistics: [
-      {
-        cpu: "4.0",
-        ram: "22.00",
-        disk: "38",
-        load_average: "0.10",
-        date: "2026-11-20 09:05:00",
-      },
-    ],
-  },
-];
+const MONITORED_IDS: Record<
+  number,
+  { name: string; ip: string; seed: number }
+> = {
+  1001: { name: "mock-web-01", ip: "203.0.113.10", seed: 0 },
+  1002: { name: "mock-web-02", ip: "203.0.113.20", seed: 1 },
+};
+
+/**
+ * Recent monitoring datapoints ending at the current minute, so each worker
+ * cadence produces a fresh (slightly different) snapshot and the M5 sparklines
+ * actually trend. Values stay in realistic percentage ranges and each server
+ * gets a distinct baseline.
+ */
+function recentStatistics(seed: number, points = 3): PloiServerStatistic[] {
+  const minute = Math.floor(Date.now() / 60_000);
+  const stats: PloiServerStatistic[] = [];
+  for (let i = points - 1; i >= 0; i -= 1) {
+    const at = minute - i * 5;
+    const wobble = at % 5;
+    stats.push({
+      cpu: (8 + seed * 6 + wobble).toFixed(1),
+      ram: (34 + seed * 8 + wobble * 0.6).toFixed(2),
+      disk: (58 + seed * 5).toFixed(0),
+      load_average: (0.2 + seed * 0.1 + wobble / 10).toFixed(2),
+      date: new Date(at * 60_000).toISOString().slice(0, 19).replace("T", " "),
+    });
+  }
+  return stats;
+}
 
 const SITES: Record<number, PloiSite[]> = {
   1001: [
@@ -187,7 +179,13 @@ export class MockPloiClient implements PloiApi {
   private nextDeploymentSeq = 1;
 
   async listMonitoredServers(): Promise<PloiMonitoredServer[]> {
-    return structuredClone(MONITORED);
+    return Object.entries(MONITORED_IDS).map(([id, meta]) => ({
+      id: Number(id),
+      name: meta.name,
+      ip: meta.ip,
+      url: `https://ploi.io/panel/servers/${id}`,
+      statistics: recentStatistics(meta.seed),
+    }));
   }
 
   async getServer(id: number): Promise<PloiServer> {
@@ -256,7 +254,9 @@ export class MockPloiClient implements PloiApi {
     if (!site) {
       throw new Error(`Mock Ploi: no site ${siteId} on server ${serverId}`);
     }
-    const id = `mock-deploy-${this.nextDeploymentSeq++}`;
+    // Unique per process so a redeploy in a fresh run can never collide with a
+    // leftover `external_id` from an earlier session (deploy_events dedupes on it).
+    const id = `mock-deploy-${Date.now().toString(36)}-${this.nextDeploymentSeq++}`;
     const deployment: PloiDeployment = {
       id,
       status: "success",
