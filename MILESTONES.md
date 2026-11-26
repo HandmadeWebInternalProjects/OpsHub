@@ -242,6 +242,47 @@ not exercised — see Session Log.
 Append entries here when you hit a blocker or complete a session. Newest
 entries at the top.
 
+### 2026-11-26 — Post-v1: release cut + live-verification prep
+- **Release:** `feat/m8-alerting` fast-forwarded into `main` (`0e4408a`, 35
+  commits) and annotated tag **`v1.0.0`** created locally. `pnpm test` (56),
+  `tsc --noEmit`, `eslint` + `prettier` re-run green afterwards.
+- **Push blocked:** the agent shell has no usable git credential — no
+  `GH_TOKEN`/`GITHUB_TOKEN`, the osxkeychain helper returns nothing, and the
+  SSH agent has no identities (`ssh -T git@github.com` → publickey denied).
+  `main` and the `v1.0.0` tag exist locally only. Needs a human to
+  `gh auth login` / add a PAT / load an authorised SSH key, then push.
+- **Delivery transport verified for real (no third party):** ran
+  `HttpAlertDelivery` with `USE_MOCKS=false` against a local HTTP receiver;
+  confirmed `POST` with `content-type: application/json` and body
+  `{"text":"…"}`. The remaining M8 gap is third-party acceptance (Google
+  Chat/Slack/Resend), not our HTTP path.
+- **Prepared:** generated `PLOI_WEBHOOK_SECRET` in the local `.env` (the
+  endpoint returned `503` without it); callback URLs are as documented in
+  README M4.
+- **Blockers for the three live checks we still owe:**
+  1. **Alert delivery** — `.env` has none of `SLACK_WEBHOOK_URL`,
+     `RESEND_API_KEY`, `ALERT_EMAIL_FROM` (nor a rule `destination`). Needs a
+     real Google Chat/Slack incoming webhook and/or a Resend key + verified
+     sender.
+  2. **Ploi deploy callback** — `NEXTAUTH_URL` is `http://localhost:3000` and
+     OpsHub is **not deployed** (`opshub.handmadeweb.com.au` resolves to
+     `221.121.138.138` but serves nothing over HTTP/HTTPS), so Ploi cannot
+     reach the webhook. Needs a deployment or a tunnel first. Site `436829`
+     also still has no repository, so a real deploy cannot be triggered until
+     repository attach exists (proposed M9) or a repo is linked in the panel.
+  3. **CMS audit** — needs a real Payload/Strapi exposing the OpsHub audit
+     contract; none is available.
+- **Safe path for (1) without touching production:** a
+  `page_score_performance` rule is evaluated from the signed Lighthouse
+  webhook and needs no Ploi call, so `USE_MOCKS=false` + a test project + the
+  reference reporter exercises **real** delivery end-to-end. Note
+  `USE_MOCKS` is a single global switch: flipping it also makes Ploi live, so
+  do **not** run the worker with mocks off unless live Ploi activity is
+  intended (the webhook route alone is enough for this check).
+- **Consequence:** deploying OpsHub is now on the critical path for M4's live
+  webhook acceptance, and it should precede the client-facing webhook
+  (`/api/webhooks/lighthouse/…`) rollout.
+
 ### 2026-11-20 — Post-M8: live-stats fix + settings restructure
 - **Fix (`1959ad7`):** the live `GET /servers/monitored` returns **named time
   series** (`[{ name: "CPU", data: { "10:25": 4.1, … } }]`), not the flat
